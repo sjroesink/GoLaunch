@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { LaunchItem } from "../types";
+import { LaunchItem, AgentStatus } from "../types";
 
-export function useLauncher() {
+interface UseLauncherOptions {
+  agentStatus: AgentStatus;
+  agentAutoFallback: boolean;
+  onAgentPrompt: (query: string) => void;
+  onAgentCancel: () => void;
+  agentTurnActive: boolean;
+}
+
+export function useLauncher(options: UseLauncherOptions) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<LaunchItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -54,6 +62,13 @@ export function useLauncher() {
     ? items.filter((item) => item.category === activeCategory)
     : items;
 
+  // Agent mode: zero results, query has content, agent is connected
+  const agentMode =
+    filteredItems.length === 0 &&
+    query.length > 2 &&
+    options.agentStatus === "connected" &&
+    options.agentAutoFallback;
+
   const executeSelected = useCallback(async () => {
     const item = filteredItems[selectedIndex];
     if (!item) return;
@@ -67,6 +82,20 @@ export function useLauncher() {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // In agent mode with active turn, Escape cancels
+      if (options.agentTurnActive && e.key === "Escape") {
+        e.preventDefault();
+        options.onAgentCancel();
+        return;
+      }
+
+      // In agent mode, Enter triggers agent prompt
+      if (agentMode && e.key === "Enter") {
+        e.preventDefault();
+        options.onAgentPrompt(query);
+        return;
+      }
+
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
@@ -114,7 +143,15 @@ export function useLauncher() {
           break;
       }
     },
-    [filteredItems, executeSelected, query, categories, activeCategory],
+    [
+      filteredItems,
+      executeSelected,
+      query,
+      categories,
+      activeCategory,
+      agentMode,
+      options,
+    ],
   );
 
   return {
@@ -129,6 +166,7 @@ export function useLauncher() {
     loading,
     handleKeyDown,
     executeSelected,
+    agentMode,
     refresh: () => {
       fetchItems(query);
       fetchCategories();

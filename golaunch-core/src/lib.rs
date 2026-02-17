@@ -2,4 +2,4 @@ pub mod db;
 pub mod models;
 
 pub use db::Database;
-pub use models::{Item, NewItem, UpdateItem};
+pub use models::{Item, NewItem, Setting, UpdateItem};

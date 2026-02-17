@@ -1,8 +1,13 @@
+mod acp;
 mod commands;
 
 use commands::*;
+use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tokio::sync::Mutex;
+
+use acp::manager::AcpManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,9 +20,23 @@ pub fn run() {
             execute_item,
             get_categories,
             hide_window,
+            get_setting,
+            set_setting,
+            get_agent_config,
+            save_agent_config,
+            acp_connect,
+            acp_disconnect,
+            acp_get_status,
+            acp_prompt,
+            acp_cancel,
+            acp_resolve_permission,
+            acp_fetch_registry,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Initialize ACP manager state
+            app.manage(AcpState(Arc::new(Mutex::new(AcpManager::new()))));
 
             // Register global shortcut: Ctrl+Space (or Cmd+Space on macOS)
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
