@@ -1,0 +1,14 @@
+[package]
+name = "golaunch-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool for managing GoLaunch items"
+
+[[bin]]
+name = "golaunch-cli"
+path = "src/main.rs"
+
+[dependencies]
+golaunch-core = { path = "../golaunch-core" }
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
