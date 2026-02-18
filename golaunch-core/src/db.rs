@@ -1,4 +1,4 @@
-use crate::models::{Item, NewItem, UpdateItem};
+use crate::models::{Item, NewItem, Setting, UpdateItem};
 use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -61,6 +61,12 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_items_title ON items(title);
                 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
                 CREATE INDEX IF NOT EXISTS idx_items_enabled ON items(enabled);
+
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
                 ",
             )
             .map_err(|e| format!("Failed to initialize database: {e}"))
@@ -258,6 +264,59 @@ impl Database {
 
     pub fn export_items(&self) -> Result<Vec<Item>, String> {
         self.list_items(None, true)
+    }
+
+    // --- Settings CRUD ---
+
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
+        match self.conn.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ) {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(format!("Failed to get setting: {e}")),
+        }
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, datetime('now'))
+                 ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')",
+                params![key, value],
+            )
+            .map_err(|e| format!("Failed to set setting: {e}"))?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<bool, String> {
+        let rows = self
+            .conn
+            .execute("DELETE FROM settings WHERE key = ?1", params![key])
+            .map_err(|e| format!("Failed to delete setting: {e}"))?;
+        Ok(rows > 0)
+    }
+
+    pub fn get_all_settings(&self) -> Result<Vec<Setting>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key, value FROM settings ORDER BY key ASC")
+            .map_err(|e| format!("Failed to prepare query: {e}"))?;
+
+        let settings = stmt
+            .query_map([], |row| {
+                Ok(Setting {
+                    key: row.get(0)?,
+                    value: row.get(1)?,
+                })
+            })
+            .map_err(|e| format!("Failed to execute query: {e}"))?
+            .collect::<SqlResult<Vec<Setting>>>()
+            .map_err(|e| format!("Failed to collect results: {e}"))?;
+
+        Ok(settings)
     }
 
     fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<Item> {

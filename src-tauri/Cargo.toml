@@ -15,6 +15,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 golaunch-core = { path = "../golaunch-core" }
 open = "5"
+agent-client-protocol = "0.9"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+async-trait = "0.1"
+futures = "0.3"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

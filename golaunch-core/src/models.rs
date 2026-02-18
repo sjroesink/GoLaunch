@@ -38,3 +38,9 @@ pub struct UpdateItem {
     pub tags: Option<String>,
     pub enabled: Option<bool>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Setting {
+    pub key: String,
+    pub value: String,
+}
