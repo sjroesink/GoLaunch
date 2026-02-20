@@ -1,11 +1,19 @@
-use golaunch_core::{Database, Item};
+use chrono::Timelike;
+use golaunch_core::{
+    CommandHistory, CommandSuggestion, Conversation, ConversationMessage, ConversationWithPreview,
+    Database, Item, Memory, NewCommandHistory, NewConversation, NewConversationMessage, NewItem,
+    NewMemory,
+};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tokio::sync::Mutex;
 
 use crate::acp::manager::AcpManager;
-use crate::acp::registry::fetch_registry;
-use crate::acp::types::{AgentConfig, AgentStatus, RegistryAgent};
+use crate::acp::registry::{check_agents_installed, fetch_registry};
+use crate::acp::types::{AgentConfig, AgentStatus, RegistryAgent, SessionConfigOptionInfo};
+use crate::context::LaunchContext;
+use crate::LaunchContextState;
 
 pub struct AcpState(pub Arc<Mutex<AcpManager>>);
 
@@ -32,6 +40,34 @@ pub fn execute_item(id: String) -> Result<(), String> {
     let db = Database::new()?;
     let item = db.get_item(&id)?;
     db.increment_frequency(&id)?;
+
+    // Record command history
+    let _ = db.record_command(NewCommandHistory {
+        item_id: Some(id.clone()),
+        command_text: item.action_value.clone(),
+        action_type: item.action_type.clone(),
+        source: Some("launcher".to_string()),
+    });
+
+    // Auto-learn: record category preference
+    let _ = db.add_memory(NewMemory {
+        key: "last_used_category".to_string(),
+        value: item.category.clone(),
+        context: None,
+        memory_type: Some("pattern".to_string()),
+        confidence: Some(0.5),
+    });
+
+    // Auto-learn: record execution hour pattern
+    let hour = chrono::Local::now().hour();
+    let time_key = format!("active_hour_{}", hour);
+    let _ = db.add_memory(NewMemory {
+        key: time_key,
+        value: item.title.clone(),
+        context: Some(item.category.clone()),
+        memory_type: Some("pattern".to_string()),
+        confidence: Some(0.3),
+    });
 
     match item.action_type.as_str() {
         "url" => {
@@ -85,11 +121,68 @@ pub fn get_categories() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub fn hide_window(app: AppHandle) -> Result<(), String> {
+    let _ = app.emit("launcher-reset", ());
     if let Some(window) = app.get_webview_window("main") {
         let _: () = window
             .hide()
             .map_err(|e| format!("Failed to hide window: {e}"))?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_window_compact(
+    app: AppHandle,
+    compact: bool,
+    anchor: Option<String>,
+) -> Result<(), String> {
+    const DEFAULT_WIDTH: f64 = 680.0;
+    const COMPACT_HEIGHT: f64 = 64.0;
+    const NORMAL_HEIGHT: f64 = 480.0;
+
+    if let Some(window) = app.get_webview_window("main") {
+        let height = if compact {
+            COMPACT_HEIGHT
+        } else {
+            NORMAL_HEIGHT
+        };
+
+        let _: () = window
+            .set_size(Size::Logical(LogicalSize::new(DEFAULT_WIDTH, height)))
+            .map_err(|e| format!("Failed to resize window: {e}"))?;
+
+        if let Some(monitor) = window
+            .primary_monitor()
+            .map_err(|e| format!("Failed to read primary monitor: {e}"))?
+        {
+            let scale = monitor.scale_factor();
+            let monitor_pos = monitor.position();
+            let monitor_size = monitor.size();
+
+            let target_width_px = (DEFAULT_WIDTH * scale).round() as i32;
+            let target_height_px = (height * scale).round() as i32;
+            let normal_height_px = (NORMAL_HEIGHT * scale).round() as i32;
+
+            let centered_x = monitor_pos.x + (monitor_size.width as i32 - target_width_px) / 2;
+            let centered_normal_top =
+                monitor_pos.y + (monitor_size.height as i32 - normal_height_px) / 2;
+
+            let y = if anchor.as_deref() == Some("bottom") {
+                centered_normal_top + normal_height_px - target_height_px
+            } else {
+                centered_normal_top
+            };
+
+            let _: () = window
+                .set_position(Position::Physical(PhysicalPosition::new(centered_x, y)))
+                .map_err(|e| format!("Failed to position window: {e}"))?;
+        } else {
+            let _: () = window
+                .center()
+                .map_err(|e| format!("Failed to center window: {e}"))?;
+        }
+    }
+
     Ok(())
 }
 
@@ -123,7 +216,11 @@ pub fn save_agent_config(config: AgentConfig) -> Result<(), String> {
     db.set_setting("acp.env", &config.env)?;
     db.set_setting(
         "acp.auto_fallback",
-        if config.auto_fallback { "true" } else { "false" },
+        if config.auto_fallback {
+            "true"
+        } else {
+            "false"
+        },
     )?;
     Ok(())
 }
@@ -140,6 +237,143 @@ fn load_agent_config(db: &Database) -> Result<AgentConfig, String> {
             .map(|v| v == "true")
             .unwrap_or(false),
     })
+}
+
+// --- Command History commands ---
+
+#[tauri::command]
+pub fn record_command(
+    item_id: Option<String>,
+    command_text: String,
+    action_type: String,
+) -> Result<CommandHistory, String> {
+    let db = Database::new()?;
+    db.record_command(NewCommandHistory {
+        item_id,
+        command_text,
+        action_type,
+        source: Some("launcher".to_string()),
+    })
+}
+
+#[tauri::command]
+pub fn get_command_suggestions(query: String) -> Result<Vec<CommandSuggestion>, String> {
+    let db = Database::new()?;
+    db.suggest_commands(&query)
+}
+
+#[tauri::command]
+pub fn add_item_from_suggestion(
+    title: String,
+    action_value: String,
+    action_type: String,
+    category: Option<String>,
+) -> Result<Item, String> {
+    let db = Database::new()?;
+    db.add_item(NewItem {
+        title,
+        subtitle: Some("Added from suggestion".to_string()),
+        icon: None,
+        action_type,
+        action_value,
+        category,
+        tags: None,
+    })
+}
+
+// --- Memory commands ---
+
+#[tauri::command]
+pub fn get_memories(query: Option<String>) -> Result<Vec<Memory>, String> {
+    let db = Database::new()?;
+    match query {
+        Some(q) if !q.is_empty() => db.search_memories(&q),
+        _ => db.list_memories(None),
+    }
+}
+
+#[tauri::command]
+pub fn add_memory_cmd(
+    key: String,
+    value: String,
+    context: Option<String>,
+    memory_type: Option<String>,
+    confidence: Option<f64>,
+) -> Result<Memory, String> {
+    let db = Database::new()?;
+    db.add_memory(NewMemory {
+        key,
+        value,
+        context,
+        memory_type,
+        confidence,
+    })
+}
+
+#[tauri::command]
+pub fn remove_memory(id: String) -> Result<bool, String> {
+    let db = Database::new()?;
+    db.remove_memory(&id)
+}
+
+#[tauri::command]
+pub fn get_memory_by_key(key: String, context: Option<String>) -> Result<Memory, String> {
+    let db = Database::new()?;
+    db.get_memory_by_key(&key, context.as_deref())
+}
+
+#[tauri::command]
+pub fn get_relevant_memories(context: Option<String>) -> Result<Vec<Memory>, String> {
+    let db = Database::new()?;
+    db.get_relevant_memories(context.as_deref())
+}
+
+// --- Conversation commands ---
+
+#[tauri::command]
+pub fn create_conversation(title: String) -> Result<Conversation, String> {
+    let db = Database::new()?;
+    db.create_conversation(NewConversation { title })
+}
+
+#[tauri::command]
+pub fn list_conversations(limit: Option<usize>) -> Result<Vec<ConversationWithPreview>, String> {
+    let db = Database::new()?;
+    db.list_conversations(limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn get_conversation_messages(
+    conversation_id: String,
+) -> Result<Vec<ConversationMessage>, String> {
+    let db = Database::new()?;
+    db.get_conversation_messages(&conversation_id)
+}
+
+#[tauri::command]
+pub fn add_conversation_message(
+    conversation_id: String,
+    role: String,
+    content: String,
+) -> Result<ConversationMessage, String> {
+    let db = Database::new()?;
+    db.add_conversation_message(NewConversationMessage {
+        conversation_id,
+        role,
+        content,
+    })
+}
+
+#[tauri::command]
+pub fn search_conversations(query: String) -> Result<Vec<ConversationWithPreview>, String> {
+    let db = Database::new()?;
+    db.search_conversations(&query)
+}
+
+#[tauri::command]
+pub fn delete_conversation(id: String) -> Result<bool, String> {
+    let db = Database::new()?;
+    db.delete_conversation(&id)
 }
 
 // --- ACP lifecycle commands ---
@@ -171,11 +405,64 @@ pub async fn acp_get_status(state: tauri::State<'_, AcpState>) -> Result<AgentSt
 #[tauri::command]
 pub async fn acp_prompt(
     state: tauri::State<'_, AcpState>,
+    context_state: tauri::State<'_, LaunchContextState>,
     query: String,
     context_items: Vec<Item>,
 ) -> Result<(), String> {
+    let db = Database::new()?;
+
+    // Read the current launch context
+    let launch_context = context_state
+        .0
+        .lock()
+        .map(|c| c.clone())
+        .unwrap_or_default();
+
+    // Fetch baseline relevant memories, then enrich with query-term matches (including facts).
+    let mut memories = db.get_relevant_memories(None).unwrap_or_default();
+    let mut seen_memory_ids: HashSet<String> = memories.iter().map(|m| m.id.clone()).collect();
+
+    let mut memory_terms = vec![query.clone()];
+    let mut seen_terms: HashSet<String> = HashSet::from([query.to_lowercase()]);
+    for token in query.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+        let normalized = token.trim().to_lowercase();
+        if normalized.len() < 3 || !seen_terms.insert(normalized.clone()) {
+            continue;
+        }
+        memory_terms.push(normalized);
+    }
+
+    for term in memory_terms {
+        if let Ok(matches) = db.search_memories(&term) {
+            for memory in matches {
+                if seen_memory_ids.insert(memory.id.clone()) {
+                    memories.push(memory);
+                }
+            }
+        }
+    }
+
+    // Fetch command suggestions for this query
+    let suggestions = db.suggest_commands(&query).unwrap_or_default();
+
+    // Fetch recent command history for behavioral context
+    let recent_history = db.get_recent_commands(10).unwrap_or_default();
+
+    // Fetch recent conversation context
+    let recent_conversations = db.get_recent_conversation_context(3).unwrap_or_default();
+
     let mut manager = state.inner().0.lock().await;
-    manager.prompt(&query, &context_items).await
+    manager
+        .prompt(
+            &query,
+            &context_items,
+            &memories,
+            &suggestions,
+            &recent_history,
+            &recent_conversations,
+            &launch_context,
+        )
+        .await
 }
 
 #[tauri::command]
@@ -196,9 +483,212 @@ pub async fn acp_resolve_permission(
     manager.resolve_permission(&request_id, &option_id).await
 }
 
+// --- ACP config option commands ---
+
+#[tauri::command]
+pub async fn acp_get_config_options(
+    state: tauri::State<'_, AcpState>,
+) -> Result<Vec<SessionConfigOptionInfo>, String> {
+    let manager = state.inner().0.lock().await;
+    Ok(manager.get_config_options())
+}
+
+#[tauri::command]
+pub async fn acp_set_config_option(
+    state: tauri::State<'_, AcpState>,
+    config_id: String,
+    value: String,
+) -> Result<Vec<SessionConfigOptionInfo>, String> {
+    let mut manager = state.inner().0.lock().await;
+    manager.set_config_option(&config_id, &value).await
+}
+
 // --- ACP registry commands ---
 
 #[tauri::command]
 pub async fn acp_fetch_registry() -> Result<Vec<RegistryAgent>, String> {
     fetch_registry().await
+}
+
+#[tauri::command]
+pub async fn acp_check_agents_installed(
+    agents: Vec<RegistryAgent>,
+) -> Result<HashMap<String, bool>, String> {
+    tokio::task::spawn_blocking(move || Ok(check_agents_installed(&agents)))
+        .await
+        .map_err(|e| format!("Failed to check installations: {e}"))?
+}
+
+// --- Agent install command ---
+
+#[tauri::command]
+pub async fn acp_install_agent(agent: RegistryAgent) -> Result<String, String> {
+    match agent.distribution_type.as_str() {
+        "npx" if !agent.distribution_detail.is_empty() => {
+            let package = agent.distribution_detail.clone();
+            tokio::task::spawn_blocking(move || {
+                #[cfg(target_os = "windows")]
+                let output = std::process::Command::new("cmd")
+                    .args(["/C", "npm", "install", "-g", &package])
+                    .output()
+                    .map_err(|e| format!("Failed to run npm install: {e}"))?;
+
+                #[cfg(not(target_os = "windows"))]
+                let output = std::process::Command::new("npm")
+                    .args(["install", "-g", &package])
+                    .output()
+                    .map_err(|e| format!("Failed to run npm install: {e}"))?;
+
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(format!("Successfully installed {package}\n{stdout}"))
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                    Err(format!("npm install failed:\n{stderr}"))
+                }
+            })
+            .await
+            .map_err(|e| format!("Install task failed: {e}"))?
+        }
+        "binary" if !agent.archive_url.is_empty() => {
+            let archive_url = agent.archive_url.clone();
+            let agent_id = agent.id.clone();
+            let agent_name = agent.name.clone();
+
+            // Download the archive and extract to a well-known directory
+            let install_dir = dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("GoLaunch")
+                .join("agents")
+                .join(&agent_id);
+
+            let install_dir_clone = install_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                // Create the install directory
+                std::fs::create_dir_all(&install_dir_clone)
+                    .map_err(|e| format!("Failed to create install dir: {e}"))?;
+
+                // Download the archive
+                let response = reqwest::blocking::get(&archive_url)
+                    .map_err(|e| format!("Failed to download {agent_name}: {e}"))?;
+                let bytes = response.bytes()
+                    .map_err(|e| format!("Failed to read download: {e}"))?;
+
+                // Extract based on file extension
+                if archive_url.ends_with(".tar.gz") || archive_url.ends_with(".tgz") {
+                    let decoder = flate2::read::GzDecoder::new(std::io::Cursor::new(&bytes));
+                    let mut archive = tar::Archive::new(decoder);
+                    archive.unpack(&install_dir_clone)
+                        .map_err(|e| format!("Failed to extract tar.gz: {e}"))?;
+                } else if archive_url.ends_with(".zip") {
+                    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&*bytes))
+                        .map_err(|e| format!("Failed to open zip: {e}"))?;
+                    archive.extract(&install_dir_clone)
+                        .map_err(|e| format!("Failed to extract zip: {e}"))?;
+                } else {
+                    return Err(format!("Unsupported archive format: {archive_url}"));
+                }
+
+                Ok(format!("Successfully installed {agent_name} to {}", install_dir_clone.display()))
+            })
+            .await
+            .map_err(|e| format!("Install task failed: {e}"))?
+        }
+        "binary" => Err(format!(
+            "No download URL available for {}. Please install it manually.",
+            agent.name
+        )),
+        _ => Err(format!(
+            "Unknown distribution type: {}",
+            agent.distribution_type
+        )),
+    }
+}
+
+// --- Launch context commands ---
+
+#[tauri::command]
+pub fn get_launch_context(
+    state: tauri::State<'_, LaunchContextState>,
+) -> Result<LaunchContext, String> {
+    let lock = state
+        .0
+        .lock()
+        .map_err(|e| format!("Failed to read launch context: {e}"))?;
+    Ok(lock.clone())
+}
+
+#[tauri::command]
+pub async fn type_text_to_app(app: AppHandle, text: String) -> Result<(), String> {
+    // Hide the launcher first so the source app regains focus
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+
+    // Small delay to let the OS switch focus back to the source app
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    tokio::task::spawn_blocking(move || crate::context::type_text(&text))
+        .await
+        .map_err(|e| format!("Task failed: {e}"))?
+}
+
+#[tauri::command]
+pub async fn replace_selection_text(app: AppHandle, text: String) -> Result<(), String> {
+    // Hide the launcher first so the source app regains focus
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+
+    // Small delay to let the OS switch focus back to the source app
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    tokio::task::spawn_blocking(move || crate::context::replace_selection(&text))
+        .await
+        .map_err(|e| format!("Task failed: {e}"))?
+}
+
+// --- Rewrite history commands ---
+
+#[tauri::command]
+pub fn record_rewrite(prompt: String) -> Result<(), String> {
+    let db = Database::new()?;
+    db.record_command(NewCommandHistory {
+        item_id: None,
+        command_text: prompt,
+        action_type: "rewrite".to_string(),
+        source: Some("selection_rewrite".to_string()),
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_rewrite_suggestions() -> Result<Vec<CommandSuggestion>, String> {
+    let db = Database::new()?;
+    db.get_recent_rewrites(10)
+}
+
+// --- Per-agent env var commands ---
+
+#[tauri::command]
+pub fn get_agent_env(agent_id: String) -> Result<Vec<(String, String)>, String> {
+    let db = Database::new()?;
+    let prefix = format!("acp.env.{}.", agent_id);
+    let all_settings = db.get_all_settings()?;
+    let env_vars: Vec<(String, String)> = all_settings
+        .into_iter()
+        .filter(|s| s.key.starts_with(&prefix))
+        .map(|s| {
+            let var_name = s.key.strip_prefix(&prefix).unwrap_or(&s.key).to_string();
+            (var_name, s.value)
+        })
+        .collect();
+    Ok(env_vars)
+}
+
+#[tauri::command]
+pub fn set_agent_env(agent_id: String, env_name: String, value: String) -> Result<(), String> {
+    let db = Database::new()?;
+    let key = format!("acp.env.{}.{}", agent_id, env_name);
+    db.set_setting(&key, &value)
 }

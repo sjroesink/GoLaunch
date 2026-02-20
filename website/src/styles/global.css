@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-launcher-bg text-launcher-text antialiased;
+  }
+
+  ::selection {
+    @apply bg-launcher-accent/30 text-white;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-launcher-accent via-pink-400 to-purple-400;
+  }
+
+  .glow-accent {
+    box-shadow:
+      0 0 40px rgba(233, 69, 96, 0.3),
+      0 0 80px rgba(233, 69, 96, 0.1);
+  }
+
+  .hero-blob {
+    @apply absolute rounded-full blur-3xl;
+    animation: float 8s ease-in-out infinite;
+  }
+
+  .section-heading {
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+
+  .section-subheading {
+    @apply text-lg text-launcher-muted max-w-2xl;
+  }
+}

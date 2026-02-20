@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Windows-MCP__Scrape",
+      "Bash(ls:*)"
+    ]
+  }
+}

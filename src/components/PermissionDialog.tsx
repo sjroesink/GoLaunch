@@ -7,48 +7,60 @@ interface PermissionDialogProps {
 }
 
 export function PermissionDialog({ request, onResolve }: PermissionDialogProps) {
+  const yesOption =
+    request.options.find((option) => {
+      const value = `${option.kind} ${option.name}`.toLowerCase();
+      return value.includes("allow") || value.includes("approve");
+    }) ?? request.options[0];
+
+  const noOption =
+    request.options.find((option) => {
+      const value = `${option.kind} ${option.name}`.toLowerCase();
+      return (
+        value.includes("deny") ||
+        value.includes("reject") ||
+        value.includes("cancel")
+      );
+    }) ?? request.options[request.options.length - 1] ?? yesOption;
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Enter" && request.options.length > 0) {
+      if (e.key === "Enter" && yesOption) {
         e.preventDefault();
-        onResolve(request.request_id, request.options[0].option_id);
-      } else if (e.key === "Escape" && request.options.length > 1) {
+        onResolve(request.request_id, yesOption.option_id);
+      } else if (e.key === "Escape" && noOption) {
         e.preventDefault();
-        onResolve(
-          request.request_id,
-          request.options[request.options.length - 1].option_id
-        );
+        onResolve(request.request_id, noOption.option_id);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [request, onResolve]);
+  }, [request, onResolve, yesOption, noOption]);
 
   return (
     <div className="permission-dialog">
       <div className="permission-header">
-        <span className="permission-icon">&#9888;</span>
         <span className="permission-title">{request.tool_name}</span>
       </div>
-      {request.tool_description && (
-        <div className="permission-description">{request.tool_description}</div>
-      )}
-      {request.command_preview && (
-        <pre className="permission-preview">{request.command_preview}</pre>
-      )}
       <div className="permission-actions">
-        {request.options.map((option) => (
-          <button
-            key={option.option_id}
-            className={`permission-btn ${option.kind.toLowerCase().includes("allow") || option.kind.toLowerCase().includes("approve") ? "permission-btn-approve" : "permission-btn-deny"}`}
-            onClick={() => onResolve(request.request_id, option.option_id)}
-          >
-            {option.name}
-          </button>
-        ))}
+        <button
+          className="permission-btn permission-btn-approve"
+          onClick={() =>
+            yesOption && onResolve(request.request_id, yesOption.option_id)
+          }
+          disabled={!yesOption}
+        >
+          Yes
+        </button>
+        <button
+          className="permission-btn permission-btn-deny"
+          onClick={() => noOption && onResolve(request.request_id, noOption.option_id)}
+          disabled={!noOption}
+        >
+          No
+        </button>
       </div>
-      <div className="permission-hint">Enter = approve, Esc = deny</div>
     </div>
   );
 }

@@ -1,0 +1,58 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-white/5 py-8">
+  <div
+    class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row"
+  >
+    <!-- Left -->
+    <div class="flex items-center gap-2 text-sm text-launcher-muted">
+      <div
+        class="flex h-6 w-6 items-center justify-center rounded-md bg-launcher-accent/20 text-launcher-accent"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          class="h-3 w-3"
+        >
+          <path
+            d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"
+          ></path>
+        </svg>
+      </div>
+      <span>GoLaunch &copy; {year}</span>
+      <span class="text-launcher-muted/50">&middot;</span>
+      <span>MIT License</span>
+    </div>
+
+    <!-- Right -->
+    <div class="flex items-center gap-4">
+      <a
+        href="https://github.com/sjroesink/GoLaunch"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm text-launcher-muted transition-colors hover:text-white"
+      >
+        GitHub
+      </a>
+      <a
+        href="https://github.com/sjroesink/GoLaunch/releases"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm text-launcher-muted transition-colors hover:text-white"
+      >
+        Releases
+      </a>
+      <a
+        href="https://github.com/sjroesink/GoLaunch/issues"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm text-launcher-muted transition-colors hover:text-white"
+      >
+        Issues
+      </a>
+    </div>
+  </div>
+</footer>

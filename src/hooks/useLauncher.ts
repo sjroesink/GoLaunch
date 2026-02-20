@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { LaunchItem, AgentStatus } from "../types";
+import { LaunchItem, AgentStatus, CommandSuggestion } from "../types";
 
 interface UseLauncherOptions {
   agentStatus: AgentStatus;
@@ -11,13 +11,24 @@ interface UseLauncherOptions {
 }
 
 export function useLauncher(options: UseLauncherOptions) {
-  const [query, setQuery] = useState("");
+  const [query, setQueryState] = useState("");
   const [items, setItems] = useState<LaunchItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<CommandSuggestion[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [focusInputSignal, setFocusInputSignal] = useState(0);
+  const [savingCommand, setSavingCommand] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const queryBeforeSuggestionSelectRef = useRef<string | null>(null);
+
+  const setQuery = useCallback((nextQuery: string) => {
+    queryBeforeSuggestionSelectRef.current = null;
+    setSelectedSuggestionIndex(-1);
+    setQueryState(nextQuery);
+  }, []);
 
   const fetchItems = useCallback(async (searchQuery: string) => {
     setLoading(true);
@@ -69,6 +80,93 @@ export function useLauncher(options: UseLauncherOptions) {
     options.agentStatus === "connected" &&
     options.agentAutoFallback;
 
+  // Fetch suggestions when no results and not in agent mode
+  useEffect(() => {
+    const shouldSuggest =
+      filteredItems.length === 0 &&
+      query.length > 2 &&
+      !agentMode;
+
+    if (shouldSuggest) {
+      invoke<CommandSuggestion[]>("get_command_suggestions", { query })
+        .then(setSuggestions)
+        .catch(() => setSuggestions([]));
+    } else {
+      setSuggestions([]);
+    }
+  }, [filteredItems.length, query, agentMode]);
+
+  useEffect(() => {
+    if (suggestions.length === 0) {
+      setSelectedSuggestionIndex(-1);
+      queryBeforeSuggestionSelectRef.current = null;
+      return;
+    }
+
+    if (selectedSuggestionIndex >= suggestions.length) {
+      setSelectedSuggestionIndex(suggestions.length - 1);
+    }
+  }, [suggestions, selectedSuggestionIndex]);
+
+  const previewSuggestion = useCallback(
+    (nextIndex: number) => {
+      if (suggestions.length === 0) return;
+
+      const clampedIndex = Math.max(0, Math.min(nextIndex, suggestions.length - 1));
+
+      setSelectedSuggestionIndex(clampedIndex);
+      if (queryBeforeSuggestionSelectRef.current === null) {
+        queryBeforeSuggestionSelectRef.current = query;
+      }
+      setQueryState(suggestions[clampedIndex].suggested_command);
+    },
+    [suggestions, query],
+  );
+
+  const restoreQueryFromSuggestionPreview = useCallback(() => {
+    setSelectedSuggestionIndex(-1);
+    if (queryBeforeSuggestionSelectRef.current !== null) {
+      setQueryState(queryBeforeSuggestionSelectRef.current);
+    }
+    queryBeforeSuggestionSelectRef.current = null;
+    setFocusInputSignal((prev) => prev + 1);
+  }, []);
+
+  const handleInputFocus = useCallback(() => {
+    if (selectedSuggestionIndex >= 0) {
+      restoreQueryFromSuggestionPreview();
+    }
+  }, [selectedSuggestionIndex, restoreQueryFromSuggestionPreview]);
+
+  const selectSuggestion = useCallback(
+    (index: number) => {
+      previewSuggestion(index);
+    },
+    [previewSuggestion],
+  );
+
+  const saveCommandFromSuggestion = useCallback(
+    async (suggestion: CommandSuggestion) => {
+      setSavingCommand(true);
+      try {
+        await invoke("add_item_from_suggestion", {
+          title: suggestion.suggested_command,
+          actionValue: suggestion.suggested_command,
+          actionType: "command",
+          category: null,
+        });
+        await fetchItems(query);
+        fetchCategories();
+        setSuggestions([]);
+      } catch (err) {
+        console.error("Failed to save command:", err);
+      } finally {
+        setSavingCommand(false);
+      }
+    },
+    [query, fetchItems, fetchCategories],
+  );
+
   const executeSelected = useCallback(async () => {
     const item = filteredItems[selectedIndex];
     if (!item) return;
@@ -86,6 +184,44 @@ export function useLauncher(options: UseLauncherOptions) {
       if (options.agentTurnActive && e.key === "Escape") {
         e.preventDefault();
         options.onAgentCancel();
+        return;
+      }
+
+      // Ctrl+S saves the top suggestion as a command
+      if (
+        suggestions.length > 0 &&
+        e.key === "s" &&
+        (e.ctrlKey || e.metaKey)
+      ) {
+        e.preventDefault();
+        saveCommandFromSuggestion(suggestions[0]);
+        return;
+      }
+
+      if (suggestions.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+
+        if (selectedSuggestionIndex < 0) {
+          if (e.key === "ArrowDown") {
+            previewSuggestion(0);
+          } else {
+            previewSuggestion(suggestions.length - 1);
+          }
+          return;
+        }
+
+        if (e.key === "ArrowDown") {
+          if (selectedSuggestionIndex >= suggestions.length - 1) {
+            restoreQueryFromSuggestionPreview();
+          } else {
+            previewSuggestion(selectedSuggestionIndex + 1);
+          }
+        } else if (selectedSuggestionIndex <= 0) {
+          restoreQueryFromSuggestionPreview();
+        } else {
+          previewSuggestion(selectedSuggestionIndex - 1);
+        }
+
         return;
       }
 
@@ -115,6 +251,10 @@ export function useLauncher(options: UseLauncherOptions) {
           break;
         case "Escape":
           e.preventDefault();
+          if (selectedSuggestionIndex >= 0) {
+            restoreQueryFromSuggestionPreview();
+            break;
+          }
           if (query) {
             setQuery("");
           } else {
@@ -151,8 +291,28 @@ export function useLauncher(options: UseLauncherOptions) {
       activeCategory,
       agentMode,
       options,
+      suggestions,
+      saveCommandFromSuggestion,
+      selectedSuggestionIndex,
+      previewSuggestion,
+      restoreQueryFromSuggestionPreview,
+      setQuery,
     ],
   );
+
+  const refresh = useCallback(() => {
+    fetchItems(query);
+    fetchCategories();
+  }, [fetchItems, fetchCategories, query]);
+
+  const reset = useCallback(() => {
+    setQuery("");
+    setSelectedIndex(0);
+    setActiveCategory(null);
+    setSuggestions([]);
+    fetchItems("");
+    fetchCategories();
+  }, [fetchItems, fetchCategories, setQuery]);
 
   return {
     query,
@@ -167,9 +327,14 @@ export function useLauncher(options: UseLauncherOptions) {
     handleKeyDown,
     executeSelected,
     agentMode,
-    refresh: () => {
-      fetchItems(query);
-      fetchCategories();
-    },
+    suggestions,
+    selectedSuggestionIndex,
+    selectSuggestion,
+    focusInputSignal,
+    handleInputFocus,
+    savingCommand,
+    saveCommandFromSuggestion,
+    refresh,
+    reset,
   };
 }

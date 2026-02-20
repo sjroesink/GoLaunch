@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use golaunch_core::{Database, NewItem, UpdateItem};
+use golaunch_core::{Database, NewCommandHistory, NewItem, NewMemory, UpdateItem};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -14,7 +14,6 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
-
 #[derive(Subcommand)]
 enum Commands {
     /// Add a new item to the launcher
@@ -125,6 +124,142 @@ enum Commands {
 
     /// Show database path
     DbPath,
+
+    /// Manage memories
+    Memory {
+        #[command(subcommand)]
+        action: MemoryCommands,
+    },
+
+    /// View command history
+    History {
+        /// Number of recent entries to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Search history for a query
+        #[arg(long)]
+        search: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute an item by ID
+    Run {
+        /// The item ID to execute
+        id: String,
+    },
+
+    /// Manage agent conversations
+    Conversations {
+        #[command(subcommand)]
+        action: ConversationCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum MemoryCommands {
+    /// Add a new memory
+    Add {
+        /// Memory key (e.g., "preferred_editor")
+        #[arg(long)]
+        key: String,
+
+        /// Memory value (e.g., "vscode")
+        #[arg(long)]
+        value: String,
+
+        /// Memory type: 'preference', 'pattern', or 'fact'
+        #[arg(long, default_value = "fact")]
+        r#type: String,
+
+        /// Optional context (e.g., category or folder)
+        #[arg(long)]
+        context: Option<String>,
+
+        /// Confidence (0.0 to 1.0)
+        #[arg(long, default_value = "1.0")]
+        confidence: f64,
+    },
+
+    /// List all memories
+    List {
+        /// Filter by memory type
+        #[arg(long)]
+        r#type: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Search memories
+    Search {
+        /// Search query
+        query: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Remove a memory by ID
+    Remove {
+        /// Memory ID to remove
+        id: String,
+    },
+
+    /// Get a memory by key
+    Get {
+        /// Memory key
+        key: String,
+
+        /// Optional context
+        #[arg(long)]
+        context: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConversationCommands {
+    /// List recent conversations
+    List {
+        /// Maximum number of conversations to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Search conversations
+    Search {
+        /// Search query
+        query: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a conversation with its messages
+    Show {
+        /// Conversation ID
+        id: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Get recent conversation context (formatted summary for agent use)
+    Context {
+        /// Number of recent conversations to include
+        #[arg(long, default_value = "5")]
+        limit: usize,
+    },
 }
 
 fn get_db(db_path: Option<PathBuf>) -> Result<Database, String> {
@@ -304,6 +439,276 @@ fn run(cli: Cli) -> Result<(), String> {
             match cli.db {
                 Some(path) => println!("{}", path.display()),
                 None => println!("{}", Database::db_path()?.display()),
+            }
+            Ok(())
+        }
+
+        Commands::Memory { action } => {
+            let db = get_db(cli.db)?;
+            match action {
+                MemoryCommands::Add {
+                    key,
+                    value,
+                    r#type,
+                    context,
+                    confidence,
+                } => {
+                    let mem = db.add_memory(NewMemory {
+                        key,
+                        value,
+                        context,
+                        memory_type: Some(r#type),
+                        confidence: Some(confidence),
+                    })?;
+                    println!("{}", serde_json::to_string_pretty(&mem).unwrap());
+                }
+                MemoryCommands::List { r#type, json } => {
+                    let memories = db.list_memories(r#type.as_deref())?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&memories).unwrap());
+                    } else if memories.is_empty() {
+                        println!("No memories found");
+                    } else {
+                        let header = format!(
+                            "{:<38} {:<20} {:<30} {:<12} {:<6}",
+                            "ID", "KEY", "VALUE", "TYPE", "CONF"
+                        );
+                        println!("{header}");
+                        println!("{}", "-".repeat(106));
+                        for mem in &memories {
+                            let value_display = if mem.value.len() > 28 {
+                                format!("{}...", &mem.value[..25])
+                            } else {
+                                mem.value.clone()
+                            };
+                            println!(
+                                "{:<38} {:<20} {:<30} {:<12} {:.1}",
+                                mem.id, mem.key, value_display, mem.memory_type, mem.confidence
+                            );
+                        }
+                        println!("\nTotal: {} memories", memories.len());
+                    }
+                }
+                MemoryCommands::Search { query, json } => {
+                    let memories = db.search_memories(&query)?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&memories).unwrap());
+                    } else if memories.is_empty() {
+                        println!("No memories matching '{query}'");
+                    } else {
+                        for mem in &memories {
+                            let context_display = mem
+                                .context
+                                .as_deref()
+                                .map(|c| format!(" [ctx: {c}]"))
+                                .unwrap_or_default();
+                            println!(
+                                "{} = {} ({}){} ({})",
+                                mem.key, mem.value, mem.memory_type, context_display, mem.id
+                            );
+                        }
+                    }
+                }
+                MemoryCommands::Remove { id } => {
+                    if db.remove_memory(&id)? {
+                        println!("Memory {id} removed successfully");
+                    } else {
+                        eprintln!("Memory {id} not found");
+                        std::process::exit(1);
+                    }
+                }
+                MemoryCommands::Get { key, context } => {
+                    let mem = db.get_memory_by_key(&key, context.as_deref())?;
+                    println!("{}", serde_json::to_string_pretty(&mem).unwrap());
+                }
+            }
+            Ok(())
+        }
+
+        Commands::History {
+            limit,
+            search,
+            json,
+        } => {
+            let db = get_db(cli.db)?;
+            let entries = match search {
+                Some(query) => db.search_command_history(&query)?,
+                None => db.get_recent_commands(limit)?,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&entries).unwrap());
+            } else if entries.is_empty() {
+                println!("No command history found");
+            } else {
+                let header = format!(
+                    "{:<38} {:<30} {:<10} {:<20} {}",
+                    "ID", "COMMAND", "TYPE", "EXECUTED AT", "SOURCE"
+                );
+                println!("{header}");
+                println!("{}", "-".repeat(108));
+                for entry in &entries {
+                    let cmd_display = if entry.command_text.len() > 28 {
+                        format!("{}...", &entry.command_text[..25])
+                    } else {
+                        entry.command_text.clone()
+                    };
+                    println!(
+                        "{:<38} {:<30} {:<10} {:<20} {}",
+                        entry.id, cmd_display, entry.action_type, entry.executed_at, entry.source
+                    );
+                }
+                println!("\nTotal: {} entries", entries.len());
+            }
+            Ok(())
+        }
+        Commands::Run { id } => {
+            let db = get_db(cli.db)?;
+            let item = db.get_item(&id)?;
+            db.increment_frequency(&id)?;
+            let _ = db.record_command(NewCommandHistory {
+                item_id: Some(id.clone()),
+                command_text: item.action_value.clone(),
+                action_type: item.action_type.clone(),
+                source: Some("cli".to_string()),
+            });
+
+            match item.action_type.as_str() {
+                "url" => {
+                    open::that(&item.action_value)
+                        .map_err(|e| format!("Failed to open URL: {e}"))?;
+                }
+                "command" | "script" => {
+                    #[cfg(target_os = "windows")]
+                    {
+                        std::process::Command::new("cmd")
+                            .args(["/C", &item.action_value])
+                            .spawn()
+                            .map_err(|e| format!("Failed to execute {}: {e}", item.action_type))?;
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        std::process::Command::new("sh")
+                            .args(["-c", &item.action_value])
+                            .spawn()
+                            .map_err(|e| format!("Failed to execute {}: {e}", item.action_type))?;
+                    }
+                }
+                other => return Err(format!("Unknown action type: {other}")),
+            }
+
+            println!("Executed item {} ({})", item.title, id);
+            Ok(())
+        }
+
+        Commands::Conversations { action } => {
+            let db = get_db(cli.db)?;
+            match action {
+                ConversationCommands::List { limit, json } => {
+                    let conversations = db.list_conversations(limit)?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&conversations).unwrap());
+                    } else if conversations.is_empty() {
+                        println!("No conversations found");
+                    } else {
+                        for conv in &conversations {
+                            let preview = conv
+                                .last_message_preview
+                                .as_deref()
+                                .unwrap_or("(empty)");
+                            let preview_display = if preview.len() > 60 {
+                                format!("{}...", &preview[..57])
+                            } else {
+                                preview.to_string()
+                            };
+                            println!(
+                                "[{}] {} ({} msgs, {})\n  {}",
+                                &conv.id[..8],
+                                conv.title,
+                                conv.message_count,
+                                conv.updated_at,
+                                preview_display
+                            );
+                        }
+                        println!("\nTotal: {} conversations", conversations.len());
+                    }
+                }
+                ConversationCommands::Search { query, json } => {
+                    let conversations = db.search_conversations(&query)?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&conversations).unwrap());
+                    } else if conversations.is_empty() {
+                        println!("No conversations matching '{query}'");
+                    } else {
+                        for conv in &conversations {
+                            let preview = conv
+                                .last_message_preview
+                                .as_deref()
+                                .unwrap_or("(empty)");
+                            let preview_display = if preview.len() > 60 {
+                                format!("{}...", &preview[..57])
+                            } else {
+                                preview.to_string()
+                            };
+                            println!(
+                                "[{}] {} ({} msgs)\n  {}",
+                                &conv.id[..8],
+                                conv.title,
+                                conv.message_count,
+                                preview_display
+                            );
+                        }
+                    }
+                }
+                ConversationCommands::Show { id, json } => {
+                    let messages = db.get_conversation_messages(&id)?;
+                    if json {
+                        let conv = db.get_conversation(&id)?;
+                        let output = serde_json::json!({
+                            "conversation": conv,
+                            "messages": messages,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    } else if messages.is_empty() {
+                        println!("No messages in conversation {id}");
+                    } else {
+                        let conv = db.get_conversation(&id)?;
+                        println!("=== {} ===\n", conv.title);
+                        for msg in &messages {
+                            let role_label = match msg.role.as_str() {
+                                "user" => "You",
+                                "assistant" => "Agent",
+                                other => other,
+                            };
+                            println!("[{} - {}]\n{}\n", role_label, msg.created_at, msg.content);
+                        }
+                    }
+                }
+                ConversationCommands::Context { limit } => {
+                    let context = db.get_recent_conversation_context(limit)?;
+                    if context.is_empty() {
+                        println!("No recent conversations.");
+                    } else {
+                        for (conv, messages) in &context {
+                            println!("--- Conversation: {} (ID: {}) ---", conv.title, conv.id);
+                            println!("    Updated: {}", conv.updated_at);
+                            for msg in messages {
+                                let role_label = match msg.role.as_str() {
+                                    "user" => "User",
+                                    "assistant" => "Assistant",
+                                    other => other,
+                                };
+                                let content_display = if msg.content.len() > 200 {
+                                    format!("{}...", &msg.content[..197])
+                                } else {
+                                    msg.content.clone()
+                                };
+                                println!("  [{}]: {}", role_label, content_display);
+                            }
+                            println!();
+                        }
+                    }
+                }
             }
             Ok(())
         }

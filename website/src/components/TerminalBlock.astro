@@ -1,0 +1,25 @@
+---
+interface Props {
+  title?: string;
+}
+
+const { title = "Terminal" } = Astro.props;
+---
+
+<div class="glass-card overflow-hidden">
+  <!-- Terminal title bar -->
+  <div
+    class="flex items-center gap-2 border-b border-white/5 bg-launcher-surface px-4 py-2.5"
+  >
+    <div class="flex gap-1.5">
+      <div class="h-2.5 w-2.5 rounded-full bg-red-500/60"></div>
+      <div class="h-2.5 w-2.5 rounded-full bg-yellow-500/60"></div>
+      <div class="h-2.5 w-2.5 rounded-full bg-green-500/60"></div>
+    </div>
+    <span class="ml-2 text-xs text-launcher-muted">{title}</span>
+  </div>
+  <!-- Terminal content -->
+  <div class="bg-launcher-bg/80 p-5 font-mono text-sm leading-relaxed">
+    <slot />
+  </div>
+</div>

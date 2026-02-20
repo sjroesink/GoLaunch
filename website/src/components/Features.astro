@@ -1,0 +1,71 @@
+---
+import FeatureCard from "./FeatureCard.astro";
+
+const features = [
+  {
+    icon: "&#9000;",
+    title: "Keyboard-First",
+    description:
+      "Navigate, search, and execute entirely from the keyboard. Arrow keys, Tab, Enter — no mouse required.",
+  },
+  {
+    icon: "&#9889;",
+    title: "Global Shortcut",
+    description:
+      "Ctrl+Space summons the launcher instantly from any application. Always one shortcut away.",
+  },
+  {
+    icon: "&#127760;",
+    title: "Cross-Platform",
+    description:
+      "Runs natively on Windows, macOS, and Linux. Powered by Tauri for a small footprint and fast startup.",
+  },
+  {
+    icon: "&#128451;",
+    title: "SQLite Storage",
+    description:
+      "Lightweight local database shared between the app and CLI. Your data stays on your machine.",
+  },
+  {
+    icon: "&#62;&#95;",
+    title: "Scriptable CLI",
+    description:
+      "Manage items, import/export JSON, and automate your launcher with golaunch-cli from any terminal.",
+  },
+  {
+    icon: "&#129302;",
+    title: "AI Agent Ready",
+    description:
+      "Connect AI agents via the Agent Communication Protocol. Natural language queries, tool use, and more.",
+  },
+];
+---
+
+<section id="features" class="relative py-32">
+  <div class="mx-auto max-w-6xl px-6">
+    <!-- Section header -->
+    <div class="mb-16 text-center">
+      <h2 class="section-heading mb-4">
+        Everything you need,
+        <span class="gradient-text">nothing you don&apos;t</span>
+      </h2>
+      <p class="section-subheading mx-auto">
+        Built for developers who value speed, simplicity, and control.
+      </p>
+    </div>
+
+    <!-- Feature grid -->
+    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {
+        features.map((feature, i) => (
+          <FeatureCard
+            icon={feature.icon}
+            title={feature.title}
+            description={feature.description}
+            delay={`${i * 0.1}s`}
+          />
+        ))
+      }
+    </div>
+  </div>
+</section>

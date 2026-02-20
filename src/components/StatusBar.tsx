@@ -2,18 +2,41 @@ interface StatusBarProps {
   itemCount: number;
   agentMode: boolean;
   agentTurnActive: boolean;
+  hasSuggestions?: boolean;
 }
 
-function StatusBar({ itemCount, agentMode, agentTurnActive }: StatusBarProps) {
+function StatusBar({
+  itemCount,
+  agentMode,
+  agentTurnActive,
+  hasSuggestions,
+}: StatusBarProps) {
   return (
     <div className="flex items-center justify-between px-4 py-2 border-t border-launcher-border/30 text-[11px] text-launcher-muted/50">
       <span>
-        {agentMode
-          ? "Agent mode"
-          : `${itemCount} ${itemCount === 1 ? "item" : "items"}`}
+        {hasSuggestions
+          ? "Suggestions"
+          : agentMode
+            ? "Agent mode"
+            : `${itemCount} ${itemCount === 1 ? "item" : "items"}`}
       </span>
       <div className="flex items-center gap-3">
-        {agentMode || agentTurnActive ? (
+        {hasSuggestions ? (
+          <>
+            <span>
+              <kbd className="px-1 py-0.5 rounded bg-launcher-surface/50 border border-launcher-border/20">
+                Ctrl+S
+              </kbd>{" "}
+              save command
+            </span>
+            <span>
+              <kbd className="px-1 py-0.5 rounded bg-launcher-surface/50 border border-launcher-border/20">
+                esc
+              </kbd>{" "}
+              clear
+            </span>
+          </>
+        ) : agentMode || agentTurnActive ? (
           <>
             <span>
               <kbd className="px-1 py-0.5 rounded bg-launcher-surface/50 border border-launcher-border/20">

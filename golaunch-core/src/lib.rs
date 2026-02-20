@@ -2,4 +2,8 @@ pub mod db;
 pub mod models;
 
 pub use db::Database;
-pub use models::{Item, NewItem, Setting, UpdateItem};
+pub use models::{
+    CommandHistory, CommandSuggestion, Conversation, ConversationMessage, ConversationWithPreview,
+    Item, Memory, NewCommandHistory, NewConversation, NewConversationMessage, NewItem, NewMemory,
+    Setting, UpdateItem,
+};

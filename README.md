@@ -51,6 +51,9 @@ golaunch-cli import items.json
 # Export all items
 golaunch-cli export --output backup.json
 
+# Execute an item by ID
+golaunch-cli run <id>
+
 # Show database location
 golaunch-cli db-path
 ```

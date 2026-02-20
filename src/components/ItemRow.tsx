@@ -20,7 +20,7 @@ function ItemRow({ item, isSelected, onHover, onClick }: ItemRowProps) {
     <div
       onMouseEnter={onHover}
       onClick={onClick}
-      className={`flex items-center px-4 py-2.5 mx-1 rounded-lg cursor-pointer transition-all duration-100 ${
+      className={`window-no-drag flex items-center px-4 py-2.5 mx-1 rounded-lg cursor-pointer transition-all duration-100 ${
         isSelected
           ? "bg-launcher-selected/80 border border-launcher-border/40"
           : "border border-transparent hover:bg-launcher-hover/50"
@@ -67,3 +67,4 @@ function ItemRow({ item, isSelected, onHover, onClick }: ItemRowProps) {
 }
 
 export default ItemRow;
+

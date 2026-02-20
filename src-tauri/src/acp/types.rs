@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequiredEnvVar {
+    pub name: String,
+    pub description: String,
+    pub is_secret: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryAgent {
     pub id: String,
     pub name: String,
@@ -8,7 +15,13 @@ pub struct RegistryAgent {
     pub description: String,
     pub icon: Option<String>,
     pub distribution_type: String,
+    /// For npx: the npm package name. For binary: the command (e.g. "./opencode.exe").
     pub distribution_detail: String,
+    /// Extra arguments from the registry (e.g. ["acp", "--flag"]).
+    pub distribution_args: Vec<String>,
+    /// Archive download URL for binary distributions.
+    pub archive_url: String,
+    pub required_env: Vec<RequiredEnvVar>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,13 +36,31 @@ pub enum AgentStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentUpdate {
-    MessageChunk { text: String },
-    ThoughtChunk { text: String },
-    ToolCall { id: String, title: String, kind: String },
-    ToolCallUpdate { id: String, title: Option<String>, status: Option<String> },
-    Plan { entries: Vec<PlanEntry> },
-    TurnComplete { stop_reason: String },
-    StatusChange { status: AgentStatus },
+    MessageChunk {
+        text: String,
+    },
+    ThoughtChunk {
+        text: String,
+    },
+    ToolCall {
+        id: String,
+        title: String,
+        kind: String,
+    },
+    ToolCallUpdate {
+        id: String,
+        title: Option<String>,
+        status: Option<String>,
+    },
+    Plan {
+        entries: Vec<PlanEntry>,
+    },
+    TurnComplete {
+        stop_reason: String,
+    },
+    StatusChange {
+        status: AgentStatus,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,4 +95,37 @@ pub struct AgentConfig {
     pub args: String,
     pub env: String,
     pub auto_fallback: bool,
+}
+
+// --- Session Config Option types (serializable mirror of ACP protocol types) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionConfigSelectOptionInfo {
+    pub value: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionConfigSelectGroupInfo {
+    pub group: String,
+    pub name: String,
+    pub options: Vec<SessionConfigSelectOptionInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SessionConfigSelectOptionsInfo {
+    Ungrouped { options: Vec<SessionConfigSelectOptionInfo> },
+    Grouped { groups: Vec<SessionConfigSelectGroupInfo> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionConfigOptionInfo {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
+    pub current_value: String,
+    pub select_options: SessionConfigSelectOptionsInfo,
 }

@@ -21,10 +21,21 @@ export type AgentUpdate =
   | { type: "message_chunk"; text: string }
   | { type: "thought_chunk"; text: string }
   | { type: "tool_call"; id: string; title: string; kind: string }
-  | { type: "tool_call_update"; id: string; title: string | null; status: string | null }
+  | {
+      type: "tool_call_update";
+      id: string;
+      title: string | null;
+      status: string | null;
+    }
   | { type: "plan"; entries: PlanEntry[] }
   | { type: "turn_complete"; stop_reason: string }
   | { type: "status_change"; status: AgentStatus };
+
+export interface AgentThreadMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
 
 export interface PlanEntry {
   content: string;
@@ -47,6 +58,12 @@ export interface PermissionOption {
   kind: string;
 }
 
+export interface RequiredEnvVar {
+  name: string;
+  description: string;
+  is_secret: boolean;
+}
+
 export interface RegistryAgent {
   id: string;
   name: string;
@@ -55,6 +72,9 @@ export interface RegistryAgent {
   icon: string | null;
   distribution_type: string;
   distribution_detail: string;
+  distribution_args: string[];
+  archive_url: string;
+  required_env: RequiredEnvVar[];
 }
 
 export interface AgentConfig {
@@ -64,4 +84,85 @@ export interface AgentConfig {
   args: string;
   env: string;
   auto_fallback: boolean;
+}
+
+// --- Launch context types ---
+
+export interface LaunchContext {
+  clipboard_text: string | null;
+  selected_text: string | null;
+  source_window_title: string | null;
+  source_process_name: string | null;
+}
+
+export interface CommandSuggestion {
+  suggested_command: string;
+  reason: string;
+  confidence: number;
+  source_item_id: string | null;
+}
+
+export interface Memory {
+  id: string;
+  key: string;
+  value: string;
+  context: string | null;
+  memory_type: string;
+  confidence: number;
+  created_at: string;
+  updated_at: string;
+  last_accessed: string;
+}
+
+// --- Conversation types ---
+
+export interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationWithPreview {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  last_message_preview: string | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+// --- Session Config Option types ---
+
+export interface SessionConfigSelectOption {
+  value: string;
+  name: string;
+  description: string | null;
+}
+
+export interface SessionConfigSelectGroup {
+  group: string;
+  name: string;
+  options: SessionConfigSelectOption[];
+}
+
+export type SessionConfigSelectOptions =
+  | { type: "ungrouped"; options: SessionConfigSelectOption[] }
+  | { type: "grouped"; groups: SessionConfigSelectGroup[] };
+
+export interface SessionConfigOptionInfo {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  current_value: string;
+  select_options: SessionConfigSelectOptions;
 }

@@ -18,9 +18,25 @@ open = "5"
 agent-client-protocol = "0.9"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["compat"] }
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
 async-trait = "0.1"
 futures = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+flate2 = "1"
+tar = "0.4"
+zip = "2"
+dirs = "6"
+enigo = { version = "0.2", features = ["serde"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

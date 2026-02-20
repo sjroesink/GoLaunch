@@ -3,14 +3,66 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use agent_client_protocol::{
-    Client, ContentBlock, RequestPermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SessionNotification, SessionUpdate,
+    Client, ContentBlock, PermissionOptionId, RequestPermissionOutcome, RequestPermissionRequest,
+    RequestPermissionResponse, SelectedPermissionOutcome, SessionNotification, SessionUpdate,
 };
 use tokio::sync::mpsc;
 
-use super::types::{AgentUpdate, PlanEntry, PermissionOptionInfo, PermissionRequest};
+use super::types::{AgentUpdate, PermissionOptionInfo, PermissionRequest, PlanEntry};
 
 type PermissionResponder = tokio::sync::oneshot::Sender<RequestPermissionOutcome>;
+
+fn normalize_command_preview(text: &str) -> String {
+    text.to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn should_auto_allow_read_lookup(command_preview: Option<&str>) -> bool {
+    let Some(preview) = command_preview else {
+        return false;
+    };
+
+    let normalized = normalize_command_preview(preview);
+    let padded = format!(" {normalized} ");
+
+    if !padded.contains("golaunch-cli") {
+        return false;
+    }
+
+    let is_read_lookup = padded.contains(" memory search ")
+        || padded.contains(" memory list ")
+        || padded.contains(" memory get ")
+        || padded.contains(" conversations list ")
+        || padded.contains(" conversations search ")
+        || padded.contains(" conversations show ")
+        || padded.contains(" conversations context ");
+
+    let is_write_operation = padded.contains(" memory add ")
+        || padded.contains(" memory remove ")
+        || padded.contains(" delete ");
+
+    is_read_lookup && !is_write_operation
+}
+
+fn pick_auto_allow_option_id(options: &[PermissionOptionInfo]) -> Option<String> {
+    options
+        .iter()
+        .find(|o| o.name.eq_ignore_ascii_case("Allow"))
+        .or_else(|| {
+            options
+                .iter()
+                .find(|o| o.name.eq_ignore_ascii_case("Always Allow"))
+        })
+        .or_else(|| {
+            options.iter().find(|o| {
+                let kind = o.kind.to_lowercase();
+                kind.contains("allow") && !kind.contains("reject") && !kind.contains("deny")
+            })
+        })
+        .map(|o| o.option_id.clone())
+}
 
 /// GoLaunch's ACP client handler.
 ///
@@ -74,6 +126,16 @@ impl Client for GoLaunchClient {
                 kind: format!("{:?}", o.kind),
             })
             .collect();
+
+        if should_auto_allow_read_lookup(command_preview.as_deref()) {
+            if let Some(option_id) = pick_auto_allow_option_id(&options) {
+                return Ok(RequestPermissionResponse::new(
+                    RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                        PermissionOptionId::new(option_id),
+                    )),
+                ));
+            }
+        }
 
         let (tx, rx) = tokio::sync::oneshot::channel();
 

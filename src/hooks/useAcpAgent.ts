@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
@@ -6,26 +6,67 @@ import type {
   AgentUpdate,
   AgentConfig,
   PermissionRequest,
+  AgentThreadMessage,
+  ConversationWithPreview,
+  SessionConfigOptionInfo,
 } from "../types";
+
+function makeMessageId(prefix: "user" | "assistant") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function useAcpAgent() {
   const [status, setStatus] = useState<AgentStatus>("disconnected");
   const [messages, setMessages] = useState("");
+  const [thread, setThread] = useState<AgentThreadMessage[]>([]);
   const [thoughts, setThoughts] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [turnActive, setTurnActive] = useState(false);
   const [permissionRequest, setPermissionRequest] =
     useState<PermissionRequest | null>(null);
+  const activeAssistantIdRef = useRef<string | null>(null);
+  const startupConnectAttempted = useRef(false);
+
+  // Conversation persistence state
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
+  const [conversations, setConversations] = useState<
+    ConversationWithPreview[]
+  >([]);
+
+  // Session config options
+  const [configOptions, setConfigOptions] = useState<
+    SessionConfigOptionInfo[]
+  >([]);
+
+  // Refs for accessing current state in event listeners (avoids stale closures)
+  const threadRef = useRef(thread);
+  threadRef.current = thread;
+  const activeConversationIdRef = useRef(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
 
   useEffect(() => {
     const unlistenUpdate = listen<AgentUpdate>("acp-update", (event) => {
       const update = event.payload;
 
       switch (update.type) {
-        case "message_chunk":
+        case "message_chunk": {
           setMessages((prev) => prev + update.text);
           setIsThinking(false);
+
+          const activeAssistantId = activeAssistantIdRef.current;
+          if (activeAssistantId) {
+            setThread((prev) =>
+              prev.map((entry) =>
+                entry.id === activeAssistantId
+                  ? { ...entry, content: entry.content + update.text }
+                  : entry,
+              ),
+            );
+          }
           break;
+        }
         case "thought_chunk":
           setThoughts((prev) => prev + update.text);
           setIsThinking(true);
@@ -37,10 +78,30 @@ export function useAcpAgent() {
           break;
         case "plan":
           break;
-        case "turn_complete":
+        case "turn_complete": {
           setTurnActive(false);
           setIsThinking(false);
+
+          // Persist the assistant's final message to the database
+          const convId = activeConversationIdRef.current;
+          const currentThread = threadRef.current;
+          const assistantId = activeAssistantIdRef.current;
+          if (convId && assistantId) {
+            const assistantMsg = currentThread.find(
+              (m) => m.id === assistantId,
+            );
+            if (assistantMsg && assistantMsg.content.length > 0) {
+              invoke("add_conversation_message", {
+                conversationId: convId,
+                role: "assistant",
+                content: assistantMsg.content,
+              }).catch(() => {});
+            }
+          }
+
+          activeAssistantIdRef.current = null;
           break;
+        }
         case "status_change":
           setStatus(update.status);
           break;
@@ -51,47 +112,180 @@ export function useAcpAgent() {
       "acp-permission-request",
       (event) => {
         setPermissionRequest(event.payload);
-      }
+      },
+    );
+
+    const unlistenConfigOptions = listen<SessionConfigOptionInfo[]>(
+      "acp-config-options",
+      (event) => {
+        setConfigOptions(event.payload);
+      },
     );
 
     return () => {
       unlistenUpdate.then((f) => f());
       unlistenPermission.then((f) => f());
+      unlistenConfigOptions.then((f) => f());
     };
   }, []);
 
   const connect = useCallback(async (config: AgentConfig) => {
     try {
+      setStatus("connecting");
       await invoke("acp_connect", { config });
+      // Fetch initial config options after connect
+      const opts = await invoke<SessionConfigOptionInfo[]>(
+        "acp_get_config_options",
+      );
+      setConfigOptions(opts);
     } catch (e) {
       console.error("Failed to connect agent:", e);
       setStatus("error");
     }
   }, []);
 
+  useEffect(() => {
+    if (startupConnectAttempted.current) return;
+    startupConnectAttempted.current = true;
+
+    async function connectOnStartup() {
+      try {
+        const currentStatus = await invoke<AgentStatus>("acp_get_status");
+        setStatus(currentStatus);
+
+        if (currentStatus === "connected" || currentStatus === "connecting") {
+          if (currentStatus === "connected") {
+            const opts = await invoke<SessionConfigOptionInfo[]>(
+              "acp_get_config_options",
+            );
+            setConfigOptions(opts);
+          }
+          return;
+        }
+
+        const config = await invoke<AgentConfig>("get_agent_config");
+
+        if (!config.binary_path.trim()) {
+          return;
+        }
+
+        // Merge per-agent env vars into config so API keys are available
+        if (config.agent_id) {
+          try {
+            const pairs = await invoke<[string, string][]>("get_agent_env", {
+              agentId: config.agent_id,
+            });
+            if (pairs.length > 0) {
+              const agentEnv = pairs
+                .filter(([, v]) => v)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(",");
+              if (agentEnv) {
+                config.env = config.env
+                  ? `${config.env},${agentEnv}`
+                  : agentEnv;
+              }
+            }
+          } catch {
+            // Per-agent env vars not available, continue with config.env
+          }
+        }
+
+        setStatus("connecting");
+        await connect(config);
+      } catch (e) {
+        console.error("Failed to restore agent connection on startup:", e);
+        setStatus("error");
+      }
+    }
+
+    connectOnStartup();
+  }, [connect]);
+
   const disconnect = useCallback(async () => {
     try {
       await invoke("acp_disconnect");
       setStatus("disconnected");
+      setThread([]);
+      setMessages("");
+      setThoughts("");
+      setTurnActive(false);
+      setIsThinking(false);
+      setActiveConversationId(null);
+      setConfigOptions([]);
+      activeAssistantIdRef.current = null;
     } catch (e) {
       console.error("Failed to disconnect agent:", e);
     }
   }, []);
 
   const prompt = useCallback(async (query: string) => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return;
+
+    const assistantId = makeMessageId("assistant");
+
+    // Create conversation if none active
+    let convId = activeConversationIdRef.current;
+    if (!convId) {
+      try {
+        const title =
+          normalizedQuery.length > 50
+            ? normalizedQuery.slice(0, 50) + "..."
+            : normalizedQuery;
+        const conv = await invoke<{ id: string }>("create_conversation", {
+          title,
+        });
+        convId = conv.id;
+        setActiveConversationId(convId);
+      } catch (e) {
+        console.error("Failed to create conversation:", e);
+      }
+    }
+
+    // Persist user message
+    if (convId) {
+      invoke("add_conversation_message", {
+        conversationId: convId,
+        role: "user",
+        content: normalizedQuery,
+      }).catch(() => {});
+    }
+
+    setThread((prev) => [
+      ...prev,
+      { id: makeMessageId("user"), role: "user", content: normalizedQuery },
+      { id: assistantId, role: "assistant", content: "" },
+    ]);
+
+    activeAssistantIdRef.current = assistantId;
     setMessages("");
     setThoughts("");
     setTurnActive(true);
     setIsThinking(true);
 
     try {
-      // Get all items for context
       const items = await invoke("get_all_items");
-      await invoke("acp_prompt", { query, contextItems: items });
+      await invoke("acp_prompt", {
+        query: normalizedQuery,
+        contextItems: items,
+      });
     } catch (e) {
       console.error("Failed to prompt agent:", e);
       setTurnActive(false);
       setIsThinking(false);
+      activeAssistantIdRef.current = null;
+      setThread((prev) =>
+        prev.map((entry) =>
+          entry.id === assistantId && entry.content.length === 0
+            ? {
+                ...entry,
+                content:
+                  "I hit an error while sending that. Please try again.",
+              }
+            : entry,
+        ),
+      );
     }
   }, []);
 
@@ -100,9 +294,20 @@ export function useAcpAgent() {
       await invoke("acp_cancel");
       setTurnActive(false);
       setIsThinking(false);
+      activeAssistantIdRef.current = null;
     } catch (e) {
       console.error("Failed to cancel:", e);
     }
+  }, []);
+
+  const clearThread = useCallback(() => {
+    setThread([]);
+    setMessages("");
+    setThoughts("");
+    setTurnActive(false);
+    setIsThinking(false);
+    setActiveConversationId(null);
+    activeAssistantIdRef.current = null;
   }, []);
 
   const resolvePermission = useCallback(
@@ -114,20 +319,125 @@ export function useAcpAgent() {
         console.error("Failed to resolve permission:", e);
       }
     },
-    []
+    [],
+  );
+
+  // --- Conversation management ---
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const list = await invoke<ConversationWithPreview[]>(
+        "list_conversations",
+        { limit: 50 },
+      );
+      setConversations(list);
+    } catch (e) {
+      console.error("Failed to load conversations:", e);
+    }
+  }, []);
+
+  const loadConversation = useCallback(async (conversationId: string) => {
+    try {
+      const msgs = await invoke<
+        { id: string; role: string; content: string }[]
+      >("get_conversation_messages", { conversationId });
+
+      const rebuilt: AgentThreadMessage[] = msgs.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      setThread(rebuilt);
+      setActiveConversationId(conversationId);
+      setMessages("");
+      setThoughts("");
+      setTurnActive(false);
+      setIsThinking(false);
+      activeAssistantIdRef.current = null;
+    } catch (e) {
+      console.error("Failed to load conversation:", e);
+    }
+  }, []);
+
+  const newConversation = useCallback(() => {
+    setThread([]);
+    setMessages("");
+    setThoughts("");
+    setTurnActive(false);
+    setIsThinking(false);
+    setActiveConversationId(null);
+    activeAssistantIdRef.current = null;
+  }, []);
+
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      try {
+        await invoke("delete_conversation", { id: conversationId });
+        setConversations((prev) =>
+          prev.filter((c) => c.id !== conversationId),
+        );
+        if (activeConversationIdRef.current === conversationId) {
+          newConversation();
+        }
+      } catch (e) {
+        console.error("Failed to delete conversation:", e);
+      }
+    },
+    [newConversation],
+  );
+
+  const searchConversations = useCallback(async (query: string) => {
+    try {
+      const list = await invoke<ConversationWithPreview[]>(
+        "search_conversations",
+        { query },
+      );
+      setConversations(list);
+    } catch (e) {
+      console.error("Failed to search conversations:", e);
+    }
+  }, []);
+
+  // --- Config option management ---
+
+  const setConfigOption = useCallback(
+    async (configId: string, value: string) => {
+      try {
+        const updated = await invoke<SessionConfigOptionInfo[]>(
+          "acp_set_config_option",
+          { configId, value },
+        );
+        setConfigOptions(updated);
+      } catch (e) {
+        console.error("Failed to set config option:", e);
+      }
+    },
+    [],
   );
 
   return {
     status,
     messages,
+    thread,
     thoughts,
     isThinking,
     turnActive,
     permissionRequest,
+    activeConversationId,
+    conversations,
+    configOptions,
     connect,
     disconnect,
     prompt,
     cancel,
+    clearThread,
     resolvePermission,
+    loadConversations,
+    loadConversation,
+    newConversation,
+    deleteConversation,
+    searchConversations,
+    setConfigOption,
   };
 }

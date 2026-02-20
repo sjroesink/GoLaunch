@@ -44,3 +44,92 @@ pub struct Setting {
     pub key: String,
     pub value: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandHistory {
+    pub id: String,
+    pub item_id: Option<String>,
+    pub command_text: String,
+    pub action_type: String,
+    pub executed_at: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewCommandHistory {
+    pub item_id: Option<String>,
+    pub command_text: String,
+    pub action_type: String,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub key: String,
+    pub value: String,
+    pub context: Option<String>,
+    pub memory_type: String,
+    pub confidence: f64,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_accessed: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewMemory {
+    pub key: String,
+    pub value: String,
+    pub context: Option<String>,
+    pub memory_type: Option<String>,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandSuggestion {
+    pub suggested_command: String,
+    pub reason: String,
+    pub confidence: f64,
+    pub source_item_id: Option<String>,
+}
+
+// --- Conversations ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Conversation {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewConversation {
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationMessage {
+    pub id: String,
+    pub conversation_id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewConversationMessage {
+    pub conversation_id: String,
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationWithPreview {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub message_count: i64,
+    pub last_message_preview: Option<String>,
+}

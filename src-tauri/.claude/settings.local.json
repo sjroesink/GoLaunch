@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" add --title \"Google\" --action-value \"https://www.google.com\" --action-type url --category \"Web\" --subtitle \"Ga naar Google\" --icon \"🔍\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory add --key \"project_dir\" --value \"D:\\\\Projects\" --type fact --context \"work\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory add --key \"fincent\" --value \"Fincent is een project\" --type fact --context \"work\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory search \"project\" --json)",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory search \"project\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory search \"fincent\" --json)",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" memory search \"fincent\")",
+      "Bash(powershell -Command:*)",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" update 974c007a-a022-4115-b3b5-d27c51179735 --action-value \"start powershell -NoExit -WorkingDirectory \"\"D:\\\\Projects\\\\Fincent\"\"\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" --help)",
+      "Bash(pulumi stack:*)",
+      "Bash(pulumi config:*)",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" add --title \"Pulumi Secrets Testing\" --subtitle \"Toon Pulumi secrets van de testing stack\" --action-value \"cd /d D:\\\\Projects\\\\Fincent\\\\src\\\\kubernetes\\\\pulumi\\\\Deployment-Stack && pulumi config --show-secrets --stack testing\" --action-type command --category \"Development\" --icon \"🔐\" --tags \"pulumi,fincent,secrets\")",
+      "Bash(\"D:\\\\Projects\\\\GoLaunch\\\\target\\\\debug\\\\golaunch-cli.exe\" update c1bbdad6-34bf-4993-87fd-ad2dac6c4ff7 --action-value \"start powershell -NoExit -Command \"\"Set-Location ''D:\\\\Projects\\\\Fincent\\\\src\\\\kubernetes\\\\pulumi\\\\Deployment-Stack''; pulumi config --show-secrets --stack testing\"\"\")"
+    ]
+  }
+}
