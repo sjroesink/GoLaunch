@@ -6,20 +6,22 @@ interface Props {
 const { title = "Terminal" } = Astro.props;
 ---
 
-<div class="glass-card overflow-hidden">
+<!-- Terminal always renders in dark style -->
+<div class="overflow-hidden rounded-2xl" style="background: rgba(26, 26, 46, 0.95); border: 1px solid rgba(255,255,255,0.1);">
   <!-- Terminal title bar -->
   <div
-    class="flex items-center gap-2 border-b border-white/5 bg-launcher-surface px-4 py-2.5"
+    class="flex items-center gap-2 border-b border-white/5 px-4 py-2.5"
+    style="background: #16213e;"
   >
     <div class="flex gap-1.5">
       <div class="h-2.5 w-2.5 rounded-full bg-red-500/60"></div>
       <div class="h-2.5 w-2.5 rounded-full bg-yellow-500/60"></div>
       <div class="h-2.5 w-2.5 rounded-full bg-green-500/60"></div>
     </div>
-    <span class="ml-2 text-xs text-launcher-muted">{title}</span>
+    <span class="ml-2 text-xs" style="color: #8892a4;">{title}</span>
   </div>
   <!-- Terminal content -->
-  <div class="bg-launcher-bg/80 p-5 font-mono text-sm leading-relaxed">
+  <div class="p-5 font-mono text-sm leading-relaxed" style="background: rgba(26, 26, 46, 0.8);">
     <slot />
   </div>
 </div>

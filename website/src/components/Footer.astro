@@ -2,7 +2,7 @@
 const year = new Date().getFullYear();
 ---
 
-<footer class="border-t border-white/5 py-8">
+<footer class="border-t py-8" style="border-color: var(--glass-border);">
   <div
     class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row"
   >
@@ -23,7 +23,7 @@ const year = new Date().getFullYear();
         </svg>
       </div>
       <span>GoLaunch &copy; {year}</span>
-      <span class="text-launcher-muted/50">&middot;</span>
+      <span class="opacity-40">&middot;</span>
       <span>MIT License</span>
     </div>
 
@@ -33,7 +33,7 @@ const year = new Date().getFullYear();
         href="https://github.com/sjroesink/GoLaunch"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-sm text-launcher-muted transition-colors hover:text-white"
+        class="text-sm text-launcher-muted transition-colors hover:text-launcher-text"
       >
         GitHub
       </a>
@@ -41,7 +41,7 @@ const year = new Date().getFullYear();
         href="https://github.com/sjroesink/GoLaunch/releases"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-sm text-launcher-muted transition-colors hover:text-white"
+        class="text-sm text-launcher-muted transition-colors hover:text-launcher-text"
       >
         Releases
       </a>
@@ -49,7 +49,7 @@ const year = new Date().getFullYear();
         href="https://github.com/sjroesink/GoLaunch/issues"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-sm text-launcher-muted transition-colors hover:text-white"
+        class="text-sm text-launcher-muted transition-colors hover:text-launcher-text"
       >
         Issues
       </a>

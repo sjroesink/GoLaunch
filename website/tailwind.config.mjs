@@ -1,19 +1,19 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./src/**/*.{astro,html,js,jsx,ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
-      // Colors mirrored from root tailwind.config.js — keep in sync
       colors: {
         launcher: {
-          bg: "#1a1a2e",
-          surface: "#16213e",
-          border: "#0f3460",
+          bg: "var(--color-bg)",
+          surface: "var(--color-surface)",
+          border: "var(--color-border)",
           accent: "#e94560",
-          text: "#eaeaea",
-          muted: "#8892a4",
-          hover: "#1e2d50",
-          selected: "#0f3460",
+          text: "var(--color-text)",
+          muted: "var(--color-muted)",
+          hover: "var(--color-hover)",
+          selected: "var(--color-selected)",
         },
       },
       fontFamily: {

@@ -23,14 +23,14 @@
   <!-- Content -->
   <div class="relative z-10 mx-auto max-w-5xl px-6 text-center">
     <!-- Badge -->
-    <div class="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-launcher-muted animate-fade-in">
-      <span class="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+    <div class="badge mb-8 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm animate-fade-in">
+      <span class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
       Open Source &mdash; Built with Tauri
     </div>
 
     <!-- Headline -->
     <h1
-      class="mb-6 text-5xl font-extrabold leading-tight tracking-tight md:text-7xl animate-slide-up"
+      class="section-heading mb-6 !text-5xl !font-extrabold !leading-tight md:!text-7xl animate-slide-up"
     >
       Your Keyboard-First
       <br />
@@ -74,7 +74,7 @@
         href="https://github.com/sjroesink/GoLaunch"
         target="_blank"
         rel="noopener noreferrer"
-        class="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-8 py-3.5 text-base font-semibold text-white transition-all hover:border-white/25 hover:bg-white/10"
+        class="btn-ghost inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-base font-semibold transition-all"
       >
         <svg viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
           <path
@@ -85,47 +85,52 @@
       </a>
     </div>
 
-    <!-- App mockup -->
+    <!-- App mockup (always dark - it's the app UI) -->
     <div
       class="mx-auto mt-16 max-w-2xl animate-slide-up"
       style="animation-delay: 0.3s; opacity: 0;"
     >
-      <div class="glass-card overflow-hidden p-1 glow-accent">
+      <div class="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-1 glow-accent" style="background: rgba(26, 26, 46, 0.95);">
         <!-- Window title bar -->
         <div
-          class="flex items-center gap-2 rounded-t-xl bg-launcher-surface px-4 py-3"
+          class="flex items-center gap-2 rounded-t-xl px-4 py-3"
+          style="background: #16213e;"
         >
           <div class="flex gap-1.5">
             <div class="h-3 w-3 rounded-full bg-red-500/60"></div>
             <div class="h-3 w-3 rounded-full bg-yellow-500/60"></div>
             <div class="h-3 w-3 rounded-full bg-green-500/60"></div>
           </div>
-          <div class="ml-2 text-xs text-launcher-muted">GoLaunch</div>
+          <div class="ml-2 text-xs" style="color: #8892a4;">GoLaunch</div>
         </div>
         <!-- Search bar mockup -->
-        <div class="bg-launcher-bg p-4">
+        <div class="p-4" style="background: #1a1a2e;">
           <div
-            class="flex items-center gap-3 rounded-lg border border-launcher-border bg-launcher-surface px-4 py-3"
+            class="flex items-center gap-3 rounded-lg px-4 py-3"
+            style="border: 1px solid #0f3460; background: #16213e;"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
-              class="h-5 w-5 text-launcher-muted"
+              class="h-5 w-5"
+              style="color: #8892a4;"
             >
               <path
                 fill-rule="evenodd"
                 d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z"
                 clip-rule="evenodd"></path>
             </svg>
-            <span class="text-launcher-muted">Type to search...</span>
+            <span style="color: #8892a4;">Type to search...</span>
             <div class="ml-auto flex gap-1">
               <kbd
-                class="rounded bg-launcher-border/50 px-1.5 py-0.5 text-xs text-launcher-muted"
+                class="rounded px-1.5 py-0.5 text-xs"
+                style="background: rgba(15, 52, 96, 0.5); color: #8892a4;"
                 >Ctrl</kbd
               >
               <kbd
-                class="rounded bg-launcher-border/50 px-1.5 py-0.5 text-xs text-launcher-muted"
+                class="rounded px-1.5 py-0.5 text-xs"
+                style="background: rgba(15, 52, 96, 0.5); color: #8892a4;"
                 >Space</kbd
               >
             </div>
@@ -133,34 +138,36 @@
           <!-- Result items -->
           <div class="mt-2 space-y-1">
             <div
-              class="flex items-center gap-3 rounded-lg bg-launcher-selected/50 px-4 py-2.5"
+              class="flex items-center gap-3 rounded-lg px-4 py-2.5"
+              style="background: rgba(15, 52, 96, 0.5);"
             >
               <span class="text-base">&#127760;</span>
               <div>
                 <div class="text-sm font-medium text-white">Open GitHub</div>
-                <div class="text-xs text-launcher-muted">URL &middot; Development</div>
+                <div class="text-xs" style="color: #8892a4;">URL &middot; Development</div>
               </div>
               <kbd
-                class="ml-auto rounded bg-launcher-border/50 px-1.5 py-0.5 text-xs text-launcher-muted"
+                class="ml-auto rounded px-1.5 py-0.5 text-xs"
+                style="background: rgba(15, 52, 96, 0.5); color: #8892a4;"
                 >&#8629;</kbd
               >
             </div>
             <div
-              class="flex items-center gap-3 rounded-lg px-4 py-2.5 transition-colors hover:bg-launcher-hover"
+              class="flex items-center gap-3 rounded-lg px-4 py-2.5"
             >
               <span class="text-base">&#9881;&#65039;</span>
               <div>
                 <div class="text-sm font-medium text-white">Deploy to Production</div>
-                <div class="text-xs text-launcher-muted">Script &middot; DevOps</div>
+                <div class="text-xs" style="color: #8892a4;">Script &middot; DevOps</div>
               </div>
             </div>
             <div
-              class="flex items-center gap-3 rounded-lg px-4 py-2.5 transition-colors hover:bg-launcher-hover"
+              class="flex items-center gap-3 rounded-lg px-4 py-2.5"
             >
               <span class="text-base">&#129302;</span>
               <div>
                 <div class="text-sm font-medium text-white">Ask AI Agent</div>
-                <div class="text-xs text-launcher-muted">ACP &middot; AI</div>
+                <div class="text-xs" style="color: #8892a4;">ACP &middot; AI</div>
               </div>
             </div>
           </div>

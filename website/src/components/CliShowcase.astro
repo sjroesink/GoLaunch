@@ -13,7 +13,7 @@ import TerminalBlock from "./TerminalBlock.astro";
 
   <div class="relative mx-auto max-w-6xl px-6">
     <div class="grid items-center gap-12 lg:grid-cols-2">
-      <!-- Terminal mockup -->
+      <!-- Terminal mockup (always dark) -->
       <div
         class="order-2 lg:order-1 animate-slide-up"
         style="opacity: 0;"
@@ -22,25 +22,25 @@ import TerminalBlock from "./TerminalBlock.astro";
           <div class="space-y-4">
             <!-- Command 1 -->
             <div>
-              <div class="text-launcher-muted">
+              <div style="color: #8892a4;">
                 <span class="text-green-400">$</span>
                 <span class="text-white"> golaunch-cli</span>
-                <span class="text-launcher-accent"> add</span>
+                <span style="color: #e94560;"> add</span>
                 <span class="text-yellow-300"> --title</span>
                 <span class="text-cyan-300">"Deploy Staging"</span>
                 <span class="text-white"> \</span>
               </div>
-              <div class="pl-4 text-launcher-muted">
+              <div class="pl-4" style="color: #8892a4;">
                 <span class="text-yellow-300">--action-type</span>
                 <span class="text-cyan-300"> script</span>
                 <span class="text-white"> \</span>
               </div>
-              <div class="pl-4 text-launcher-muted">
+              <div class="pl-4" style="color: #8892a4;">
                 <span class="text-yellow-300">--action-value</span>
                 <span class="text-cyan-300">"./deploy.sh staging"</span>
                 <span class="text-white"> \</span>
               </div>
-              <div class="pl-4 text-launcher-muted">
+              <div class="pl-4" style="color: #8892a4;">
                 <span class="text-yellow-300">--category</span>
                 <span class="text-cyan-300">"DevOps"</span>
               </div>
@@ -51,18 +51,18 @@ import TerminalBlock from "./TerminalBlock.astro";
 
             <!-- Command 2 -->
             <div>
-              <div class="text-launcher-muted">
+              <div style="color: #8892a4;">
                 <span class="text-green-400">$</span>
                 <span class="text-white"> golaunch-cli</span>
-                <span class="text-launcher-accent"> list</span>
+                <span style="color: #e94560;"> list</span>
                 <span class="text-yellow-300"> --category</span>
                 <span class="text-cyan-300">"DevOps"</span>
                 <span class="text-yellow-300"> --json</span>
               </div>
-              <div class="mt-1 text-launcher-muted">
+              <div class="mt-1" style="color: #8892a4;">
                 <span class="text-white">[</span>
               </div>
-              <div class="pl-4 text-launcher-muted">
+              <div class="pl-4" style="color: #8892a4;">
                 <span class="text-white"
                   >&#123; &quot;title&quot;: &quot;<span class="text-cyan-300"
                     >Deploy Staging</span
@@ -71,17 +71,17 @@ import TerminalBlock from "./TerminalBlock.astro";
                   >&quot; &#125;</span
                 >
               </div>
-              <div class="text-launcher-muted">
+              <div style="color: #8892a4;">
                 <span class="text-white">]</span>
               </div>
             </div>
 
             <!-- Command 3 -->
             <div>
-              <div class="text-launcher-muted">
+              <div style="color: #8892a4;">
                 <span class="text-green-400">$</span>
                 <span class="text-white"> golaunch-cli</span>
-                <span class="text-launcher-accent"> import</span>
+                <span style="color: #e94560;"> import</span>
                 <span class="text-cyan-300"> team-items.json</span>
               </div>
               <div class="mt-1 text-green-400/80">
@@ -92,7 +92,7 @@ import TerminalBlock from "./TerminalBlock.astro";
         </TerminalBlock>
       </div>
 
-      <!-- Text content -->
+      <!-- Text content (theme-aware) -->
       <div
         class="order-1 lg:order-2 animate-slide-up"
         style="animation-delay: 0.1s; opacity: 0;"
@@ -119,30 +119,17 @@ import TerminalBlock from "./TerminalBlock.astro";
         </h2>
 
         <p class="mb-6 text-lg text-launcher-muted">
-          The <code
-            class="rounded bg-white/5 px-1.5 py-0.5 font-mono text-sm text-white"
-            >golaunch-cli</code
-          > gives you full control from the terminal. Add items, export to JSON,
+          The <code class="code-inline">golaunch-cli</code> gives you full control from the terminal. Add items, export to JSON,
           and import shared configurations.
         </p>
 
         <div class="space-y-3">
-          <div class="flex items-center gap-3 text-launcher-muted">
-            <div class="h-1.5 w-1.5 rounded-full bg-launcher-accent"></div>
-            <span>Add, remove, and search items from the terminal</span>
-          </div>
-          <div class="flex items-center gap-3 text-launcher-muted">
-            <div class="h-1.5 w-1.5 rounded-full bg-launcher-accent"></div>
-            <span>JSON import/export for team sharing</span>
-          </div>
-          <div class="flex items-center gap-3 text-launcher-muted">
-            <div class="h-1.5 w-1.5 rounded-full bg-launcher-accent"></div>
-            <span>Perfect for CI/CD and automation scripts</span>
-          </div>
-          <div class="flex items-center gap-3 text-launcher-muted">
-            <div class="h-1.5 w-1.5 rounded-full bg-launcher-accent"></div>
-            <span>Shares the same SQLite database as the app</span>
-          </div>
+          {["Add, remove, and search items from the terminal", "JSON import/export for team sharing", "Perfect for CI/CD and automation scripts", "Shares the same SQLite database as the app"].map((text) => (
+            <div class="flex items-center gap-3 text-launcher-muted">
+              <div class="h-1.5 w-1.5 rounded-full bg-launcher-accent" />
+              <span>{text}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

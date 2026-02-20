@@ -15,7 +15,7 @@
       <!-- Text content -->
       <div class="animate-slide-up" style="opacity: 0;">
         <div
-          class="mb-4 inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-sm text-purple-300"
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-sm text-purple-500 dark:text-purple-300"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -36,115 +36,43 @@
         </h2>
 
         <div class="space-y-4">
-          <div class="flex items-start gap-3">
-            <div
-              class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-launcher-accent/20 text-launcher-accent"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="h-3.5 w-3.5"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                  clip-rule="evenodd"></path>
-              </svg>
+          {[
+            { bold: "Natural language fallback.", rest: "When no launcher match is found, your query is forwarded to the connected AI agent." },
+            { bold: "Permission system.", rest: "Agents request approval before taking sensitive actions. You stay in control." },
+            { bold: "Context-aware.", rest: "Captures clipboard content and selected text to provide rich context to agents." },
+            { bold: "Agent Communication Protocol.", rest: "Open standard (ACP 0.9) — connect any compatible agent." },
+          ].map((item) => (
+            <div class="flex items-start gap-3">
+              <div class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-launcher-accent/20 text-launcher-accent">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5">
+                  <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <p class="text-launcher-muted">
+                <span class="font-medium" style="color: var(--heading-color);">{item.bold}</span>{" "}{item.rest}
+              </p>
             </div>
-            <p class="text-launcher-muted">
-              <span class="font-medium text-white"
-                >Natural language fallback.</span
-              > When no launcher match is found, your query is forwarded to the connected
-              AI agent.
-            </p>
-          </div>
-
-          <div class="flex items-start gap-3">
-            <div
-              class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-launcher-accent/20 text-launcher-accent"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="h-3.5 w-3.5"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                  clip-rule="evenodd"></path>
-              </svg>
-            </div>
-            <p class="text-launcher-muted">
-              <span class="font-medium text-white">Permission system.</span> Agents
-              request approval before taking sensitive actions. You stay in control.
-            </p>
-          </div>
-
-          <div class="flex items-start gap-3">
-            <div
-              class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-launcher-accent/20 text-launcher-accent"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="h-3.5 w-3.5"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                  clip-rule="evenodd"></path>
-              </svg>
-            </div>
-            <p class="text-launcher-muted">
-              <span class="font-medium text-white">Context-aware.</span> Captures
-              clipboard content and selected text to provide rich context to agents.
-            </p>
-          </div>
-
-          <div class="flex items-start gap-3">
-            <div
-              class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-launcher-accent/20 text-launcher-accent"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="h-3.5 w-3.5"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                  clip-rule="evenodd"></path>
-              </svg>
-            </div>
-            <p class="text-launcher-muted">
-              <span class="font-medium text-white"
-                >Agent Communication Protocol.</span
-              > Open standard (ACP 0.9) — connect any compatible agent.
-            </p>
-          </div>
+          ))}
         </div>
       </div>
 
-      <!-- Agent conversation mockup -->
+      <!-- Agent conversation mockup (always dark) -->
       <div
         class="animate-slide-up"
         style="animation-delay: 0.15s; opacity: 0;"
       >
-        <div class="glass-card overflow-hidden p-1">
+        <div class="overflow-hidden rounded-2xl p-1" style="background: rgba(26, 26, 46, 0.95); border: 1px solid rgba(255,255,255,0.1);">
           <!-- Window bar -->
           <div
-            class="flex items-center gap-2 rounded-t-xl bg-launcher-surface px-4 py-3"
+            class="flex items-center gap-2 rounded-t-xl px-4 py-3"
+            style="background: #16213e;"
           >
             <div class="flex gap-1.5">
               <div class="h-3 w-3 rounded-full bg-red-500/60"></div>
               <div class="h-3 w-3 rounded-full bg-yellow-500/60"></div>
               <div class="h-3 w-3 rounded-full bg-green-500/60"></div>
             </div>
-            <div class="ml-2 flex items-center gap-1.5 text-xs text-launcher-muted">
+            <div class="ml-2 flex items-center gap-1.5 text-xs" style="color: #8892a4;">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
@@ -160,7 +88,7 @@
           </div>
 
           <!-- Chat -->
-          <div class="space-y-4 bg-launcher-bg p-4">
+          <div class="space-y-4 p-4" style="background: #1a1a2e;">
             <!-- User message -->
             <div class="flex justify-end">
               <div
@@ -173,18 +101,20 @@
             <!-- Agent response -->
             <div class="flex justify-start">
               <div
-                class="max-w-[85%] rounded-2xl rounded-bl-md bg-launcher-surface px-4 py-2.5 text-sm"
+                class="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm"
+                style="background: #16213e;"
               >
-                <p class="mb-2 text-launcher-text">
+                <p class="mb-2" style="color: #eaeaea;">
                   I&apos;ll check your running Docker containers:
                 </p>
                 <div
-                  class="rounded-lg bg-launcher-bg/80 px-3 py-2 font-mono text-xs text-launcher-muted"
+                  class="rounded-lg px-3 py-2 font-mono text-xs"
+                  style="background: rgba(26, 26, 46, 0.8); color: #8892a4;"
                 >
                   <span class="text-green-400">$</span> docker ps --format
                   &quot;table &#123;&#123;.Names&#125;&#125;\t&#123;&#123;.Status&#125;&#125;&quot;
                 </div>
-                <p class="mt-2 text-launcher-text">
+                <p class="mt-2" style="color: #eaeaea;">
                   You have <span class="font-medium text-white">3 containers</span>
                   running: postgres, redis, and nginx.
                 </p>
