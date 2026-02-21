@@ -2,10 +2,12 @@ use agent_client_protocol::{
     Agent, ClientCapabilities, ClientSideConnection, ContentBlock, Implementation,
     InitializeRequest, NewSessionRequest, PermissionOptionId, ProtocolVersion,
     RequestPermissionOutcome, SelectedPermissionOutcome, SessionConfigId, SessionConfigKind,
-    SessionConfigOption, SessionConfigSelectOptions, SessionConfigValueId,
-    SetSessionConfigOptionRequest, SessionId, TextContent,
+    SessionConfigOption, SessionConfigSelectOptions, SessionConfigValueId, SessionId,
+    SetSessionConfigOptionRequest, TextContent,
 };
-use golaunch_core::{CommandHistory, CommandSuggestion, Conversation, ConversationMessage, Item, Memory};
+use golaunch_core::{
+    CommandHistory, CommandSuggestion, Conversation, ConversationMessage, Item, Memory,
+};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot};
 
@@ -134,7 +136,8 @@ impl AcpManager {
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel::<()>();
 
         // Session initialization oneshot (now returns config options too)
-        let (session_tx, session_rx) = oneshot::channel::<Result<(SessionId, Vec<SessionConfigOptionInfo>), String>>();
+        let (session_tx, session_rx) =
+            oneshot::channel::<Result<(SessionId, Vec<SessionConfigOptionInfo>), String>>();
 
         // Spawn the ACP connection on a dedicated thread with LocalSet
         // (required because Client trait is !Send)
@@ -497,14 +500,16 @@ fn convert_config_option(opt: &SessionConfigOption) -> SessionConfigOptionInfo {
             };
             (current, opts)
         }
-        _ => return SessionConfigOptionInfo {
-            id: opt.id.0.to_string(),
-            name: opt.name.clone(),
-            description: opt.description.clone(),
-            category,
-            current_value: String::new(),
-            select_options: SessionConfigSelectOptionsInfo::Ungrouped { options: vec![] },
-        },
+        _ => {
+            return SessionConfigOptionInfo {
+                id: opt.id.0.to_string(),
+                name: opt.name.clone(),
+                description: opt.description.clone(),
+                category,
+                current_value: String::new(),
+                select_options: SessionConfigSelectOptionsInfo::Ungrouped { options: vec![] },
+            }
+        }
     };
 
     SessionConfigOptionInfo {
@@ -805,10 +810,7 @@ fn build_agent_prompt(
             } else {
                 text.clone()
             };
-            p.push_str(&format!(
-                "Selected text:\n```\n{}\n```\n",
-                truncated
-            ));
+            p.push_str(&format!("Selected text:\n```\n{}\n```\n", truncated));
         }
         if let Some(ref text) = launch_context.clipboard_text {
             let truncated = if text.len() > 1000 {
@@ -816,10 +818,7 @@ fn build_agent_prompt(
             } else {
                 text.clone()
             };
-            p.push_str(&format!(
-                "Clipboard contents:\n```\n{}\n```\n",
-                truncated
-            ));
+            p.push_str(&format!("Clipboard contents:\n```\n{}\n```\n", truncated));
         }
         p.push('\n');
     }

@@ -72,8 +72,12 @@ pub fn run() {
             // Initialize launch context state
             app.manage(LaunchContextState(StdMutex::new(LaunchContext::default())));
 
-            // Register global shortcut: Ctrl+Space (or Cmd+Space on macOS)
-            let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
+            // Register global shortcut: Option+Space on macOS, Ctrl+Space on Windows/Linux
+            let shortcut = if cfg!(target_os = "macos") {
+                Shortcut::new(Some(Modifiers::ALT), Code::Space)
+            } else {
+                Shortcut::new(Some(Modifiers::CONTROL), Code::Space)
+            };
             app.handle()
                 .plugin(tauri_plugin_global_shortcut::Builder::new().build())
                 .unwrap_or(());

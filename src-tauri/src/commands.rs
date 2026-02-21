@@ -571,25 +571,31 @@ pub async fn acp_install_agent(agent: RegistryAgent) -> Result<String, String> {
                 // Download the archive
                 let response = reqwest::blocking::get(&archive_url)
                     .map_err(|e| format!("Failed to download {agent_name}: {e}"))?;
-                let bytes = response.bytes()
+                let bytes = response
+                    .bytes()
                     .map_err(|e| format!("Failed to read download: {e}"))?;
 
                 // Extract based on file extension
                 if archive_url.ends_with(".tar.gz") || archive_url.ends_with(".tgz") {
                     let decoder = flate2::read::GzDecoder::new(std::io::Cursor::new(&bytes));
                     let mut archive = tar::Archive::new(decoder);
-                    archive.unpack(&install_dir_clone)
+                    archive
+                        .unpack(&install_dir_clone)
                         .map_err(|e| format!("Failed to extract tar.gz: {e}"))?;
                 } else if archive_url.ends_with(".zip") {
                     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&*bytes))
                         .map_err(|e| format!("Failed to open zip: {e}"))?;
-                    archive.extract(&install_dir_clone)
+                    archive
+                        .extract(&install_dir_clone)
                         .map_err(|e| format!("Failed to extract zip: {e}"))?;
                 } else {
                     return Err(format!("Unsupported archive format: {archive_url}"));
                 }
 
-                Ok(format!("Successfully installed {agent_name} to {}", install_dir_clone.display()))
+                Ok(format!(
+                    "Successfully installed {agent_name} to {}",
+                    install_dir_clone.display()
+                ))
             })
             .await
             .map_err(|e| format!("Install task failed: {e}"))?

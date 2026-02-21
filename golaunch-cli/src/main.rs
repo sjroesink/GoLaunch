@@ -612,10 +612,7 @@ fn run(cli: Cli) -> Result<(), String> {
                         println!("No conversations found");
                     } else {
                         for conv in &conversations {
-                            let preview = conv
-                                .last_message_preview
-                                .as_deref()
-                                .unwrap_or("(empty)");
+                            let preview = conv.last_message_preview.as_deref().unwrap_or("(empty)");
                             let preview_display = if preview.len() > 60 {
                                 format!("{}...", &preview[..57])
                             } else {
@@ -641,10 +638,7 @@ fn run(cli: Cli) -> Result<(), String> {
                         println!("No conversations matching '{query}'");
                     } else {
                         for conv in &conversations {
-                            let preview = conv
-                                .last_message_preview
-                                .as_deref()
-                                .unwrap_or("(empty)");
+                            let preview = conv.last_message_preview.as_deref().unwrap_or("(empty)");
                             let preview_display = if preview.len() > 60 {
                                 format!("{}...", &preview[..57])
                             } else {

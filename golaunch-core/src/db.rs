@@ -823,7 +823,10 @@ impl Database {
         Ok(convs)
     }
 
-    pub fn search_conversations(&self, query: &str) -> Result<Vec<ConversationWithPreview>, String> {
+    pub fn search_conversations(
+        &self,
+        query: &str,
+    ) -> Result<Vec<ConversationWithPreview>, String> {
         let pattern = format!("%{query}%");
         let mut stmt = self
             .conn

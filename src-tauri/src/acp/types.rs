@@ -116,8 +116,12 @@ pub struct SessionConfigSelectGroupInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SessionConfigSelectOptionsInfo {
-    Ungrouped { options: Vec<SessionConfigSelectOptionInfo> },
-    Grouped { groups: Vec<SessionConfigSelectGroupInfo> },
+    Ungrouped {
+        options: Vec<SessionConfigSelectOptionInfo>,
+    },
+    Grouped {
+        groups: Vec<SessionConfigSelectGroupInfo>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

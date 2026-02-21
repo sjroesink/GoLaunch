@@ -85,8 +85,8 @@ fn check_npm_package_installed(package: &str) -> bool {
     let search_name = if package.starts_with('@') {
         // Scoped: "@scope/pkg-name@version" → "@scope/pkg-name"
         package
-            .splitn(3, '@')           // ["", "scope/pkg-name", "version"]
-            .nth(1)                    // "scope/pkg-name"
+            .splitn(3, '@') // ["", "scope/pkg-name", "version"]
+            .nth(1) // "scope/pkg-name"
             .map(|s| {
                 // Re-attach the leading '@' that splitn stripped
                 // We'll just search for the unscoped part after the '/'
@@ -304,12 +304,14 @@ fn parse_string_array(value: &Value) -> Vec<String> {
 fn extract_distribution(entry: &Value, platform_keys: &[&str]) -> DistributionInfo {
     let distribution = match entry.get("distribution").and_then(Value::as_object) {
         Some(dist) => dist,
-        None => return DistributionInfo {
-            dist_type: "unknown".to_string(),
-            detail: String::new(),
-            args: vec![],
-            archive_url: String::new(),
-        },
+        None => {
+            return DistributionInfo {
+                dist_type: "unknown".to_string(),
+                detail: String::new(),
+                args: vec![],
+                archive_url: String::new(),
+            }
+        }
     };
 
     // Prefer binary distribution if available for this platform (more reliable than npx)
@@ -327,10 +329,7 @@ fn extract_distribution(entry: &Value, platform_keys: &[&str]) -> DistributionIn
             .unwrap_or_default()
             .to_string();
         if !package.is_empty() {
-            let args = npx
-                .get("args")
-                .map(parse_string_array)
-                .unwrap_or_default();
+            let args = npx.get("args").map(parse_string_array).unwrap_or_default();
             return DistributionInfo {
                 dist_type: "npx".to_string(),
                 detail: package,

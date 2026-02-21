@@ -30,17 +30,57 @@ pub fn capture_launch_context() -> LaunchContext {
     }
 }
 
+// ── Cross-platform clipboard via arboard ──
+
 /// Read text from the system clipboard.
 fn get_clipboard_text() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        win32::get_clipboard_text()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        None
+    let mut clipboard = arboard::Clipboard::new().ok()?;
+    clipboard.get_text().ok().filter(|s| !s.is_empty())
+}
+
+/// Write text to the system clipboard.
+fn set_clipboard_text(text: &str) -> Result<(), String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("Failed to init clipboard: {e}"))?;
+    clipboard
+        .set_text(text.to_string())
+        .map_err(|e| format!("Failed to set clipboard: {e}"))
+}
+
+// ── Cross-platform selected text capture ──
+
+/// Capture the currently selected text by simulating Ctrl+C (or Cmd+C on macOS)
+/// and reading clipboard. Compares against the previous clipboard contents to
+/// detect whether something was copied.
+fn capture_selected_text(previous_clipboard: &Option<String>) -> Option<String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let mut enigo = Enigo::new(&Settings::default()).ok()?;
+
+    // Use Cmd on macOS, Ctrl on Windows/Linux
+    let modifier = if cfg!(target_os = "macos") {
+        Key::Meta
+    } else {
+        Key::Control
+    };
+
+    enigo.key(modifier, Direction::Press).ok()?;
+    enigo.key(Key::Unicode('c'), Direction::Click).ok()?;
+    enigo.key(modifier, Direction::Release).ok()?;
+
+    // Give the target app time to update the clipboard
+    std::thread::sleep(std::time::Duration::from_millis(80));
+
+    let new_clipboard = get_clipboard_text();
+
+    match (&new_clipboard, previous_clipboard) {
+        (Some(new), Some(old)) if new != old => Some(new.clone()),
+        (Some(new), None) => Some(new.clone()),
+        _ => None,
     }
 }
+
+// ── Foreground window info (platform-specific) ──
 
 /// Get the title of the foreground window.
 fn get_foreground_window_title() -> Option<String> {
@@ -48,7 +88,11 @@ fn get_foreground_window_title() -> Option<String> {
     {
         win32::get_foreground_window_title()
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_foreground_window_title()
+    }
+    #[cfg(target_os = "linux")]
     {
         None
     }
@@ -60,28 +104,19 @@ fn get_foreground_process_name() -> Option<String> {
     {
         win32::get_foreground_process_name()
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_foreground_process_name()
+    }
+    #[cfg(target_os = "linux")]
     {
         None
     }
 }
 
-/// Capture the currently selected text by simulating Ctrl+C and reading clipboard.
-/// Compares against the previous clipboard contents to detect whether something was copied.
-fn capture_selected_text(previous_clipboard: &Option<String>) -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        win32::capture_selected_text(previous_clipboard)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = previous_clipboard;
-        None
-    }
-}
+// ── Cross-platform text input ──
 
-/// Simulate typing text into the currently focused application via SendInput,
-/// then restore focus so the text lands in the right window.
+/// Simulate typing text into the currently focused application.
 pub fn type_text(text: &str) -> Result<(), String> {
     use enigo::{Enigo, Keyboard, Settings};
 
@@ -95,121 +130,43 @@ pub fn type_text(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Simulate replacing the current selection: select-all in the selection region, then type over it.
-/// This works by first doing Ctrl+V with the new text on the clipboard.
+/// Simulate replacing the current selection: put text on clipboard, then paste.
+/// Uses Cmd+V on macOS, Ctrl+V on Windows/Linux.
 pub fn replace_selection(text: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Put the replacement text on the clipboard
-        win32::set_clipboard_text(text)?;
+    set_clipboard_text(text)?;
 
-        // Simulate Ctrl+V to paste over the selection
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
-        let mut enigo =
-            Enigo::new(&Settings::default()).map_err(|e| format!("Failed to init enigo: {e}"))?;
+    let mut enigo =
+        Enigo::new(&Settings::default()).map_err(|e| format!("Failed to init enigo: {e}"))?;
 
-        enigo
-            .key(Key::Control, Direction::Press)
-            .map_err(|e| format!("Failed to press Ctrl: {e}"))?;
-        enigo
-            .key(Key::Unicode('v'), Direction::Click)
-            .map_err(|e| format!("Failed to press V: {e}"))?;
-        enigo
-            .key(Key::Control, Direction::Release)
-            .map_err(|e| format!("Failed to release Ctrl: {e}"))?;
+    let modifier = if cfg!(target_os = "macos") {
+        Key::Meta
+    } else {
+        Key::Control
+    };
 
-        Ok(())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = text;
-        Err("replace_selection is only supported on Windows".to_string())
-    }
+    enigo
+        .key(modifier, Direction::Press)
+        .map_err(|e| format!("Failed to press modifier: {e}"))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("Failed to press V: {e}"))?;
+    enigo
+        .key(modifier, Direction::Release)
+        .map_err(|e| format!("Failed to release modifier: {e}"))?;
+
+    Ok(())
 }
 
 // ── Windows-specific implementations ──
 
 #[cfg(target_os = "windows")]
 mod win32 {
-    use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND};
-    use windows::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
-    };
-    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-    use windows::Win32::System::Ole::CF_UNICODETEXT;
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
     };
-
-    /// Convert a HANDLE (from GetClipboardData) to HGLOBAL for GlobalLock/GlobalUnlock.
-    fn handle_to_hglobal(h: HANDLE) -> HGLOBAL {
-        HGLOBAL(h.0)
-    }
-
-    pub fn get_clipboard_text() -> Option<String> {
-        unsafe {
-            if OpenClipboard(None).is_err() {
-                return None;
-            }
-
-            let result = (|| {
-                let handle = GetClipboardData(CF_UNICODETEXT.0 as u32).ok()?;
-                let hglobal = handle_to_hglobal(handle);
-                let ptr = GlobalLock(hglobal) as *const u16;
-                if ptr.is_null() {
-                    return None;
-                }
-
-                let mut len = 0;
-                while *ptr.add(len) != 0 {
-                    len += 1;
-                }
-
-                let slice = std::slice::from_raw_parts(ptr, len);
-                let text = String::from_utf16_lossy(slice);
-                let _ = GlobalUnlock(hglobal);
-
-                if text.is_empty() {
-                    None
-                } else {
-                    Some(text)
-                }
-            })();
-
-            let _ = CloseClipboard();
-            result
-        }
-    }
-
-    pub fn set_clipboard_text(text: &str) -> Result<(), String> {
-        unsafe {
-            // Convert UTF-8 to UTF-16
-            let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-            let byte_len = wide.len() * 2;
-
-            let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)
-                .map_err(|e| format!("GlobalAlloc failed: {e}"))?;
-            let ptr = GlobalLock(hmem) as *mut u16;
-            if ptr.is_null() {
-                return Err("GlobalLock failed".to_string());
-            }
-
-            std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
-            let _ = GlobalUnlock(hmem);
-
-            OpenClipboard(None).map_err(|e| format!("OpenClipboard failed: {e}"))?;
-            let _ = EmptyClipboard();
-
-            // HGLOBAL → HANDLE for SetClipboardData
-            let handle = HANDLE(hmem.0);
-            SetClipboardData(CF_UNICODETEXT.0 as u32, Some(handle))
-                .map_err(|e| format!("SetClipboardData failed: {e}"))?;
-
-            let _ = CloseClipboard();
-            Ok(())
-        }
-    }
 
     pub fn get_foreground_window_title() -> Option<String> {
         unsafe {
@@ -244,15 +201,12 @@ mod win32 {
                 return None;
             }
 
-            // Use QueryFullProcessImageNameW instead of GetModuleBaseNameW
-            // to avoid needing the ProcessStatus feature
             use windows::Win32::System::Threading::{
                 OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
                 PROCESS_QUERY_LIMITED_INFORMATION,
             };
 
-            let process =
-                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()?;
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()?;
 
             let mut name_buf = vec![0u16; 1024];
             let mut size = name_buf.len() as u32;
@@ -267,7 +221,6 @@ mod win32 {
 
             if ok.is_ok() && size > 0 {
                 let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
-                // Extract just the filename from the full path
                 let name = full_path
                     .rsplit('\\')
                     .next()
@@ -279,28 +232,56 @@ mod win32 {
             }
         }
     }
+}
 
-    pub fn capture_selected_text(previous_clipboard: &Option<String>) -> Option<String> {
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+// ── macOS-specific implementations ──
 
-        // Simulate Ctrl+C to copy any selection
-        let mut enigo = Enigo::new(&Settings::default()).ok()?;
+#[cfg(target_os = "macos")]
+mod macos {
+    use std::process::Command;
 
-        enigo.key(Key::Control, Direction::Press).ok()?;
-        enigo.key(Key::Unicode('c'), Direction::Click).ok()?;
-        enigo.key(Key::Control, Direction::Release).ok()?;
+    pub fn get_foreground_window_title() -> Option<String> {
+        let output = Command::new("osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events"
+                    set frontApp to first application process whose frontmost is true
+                    try
+                        set winTitle to name of front window of frontApp
+                        return winTitle
+                    on error
+                        return name of frontApp
+                    end try
+                end tell"#,
+            ])
+            .output()
+            .ok()?;
 
-        // Give the target app time to update the clipboard
-        std::thread::sleep(std::time::Duration::from_millis(80));
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
+        }
+    }
 
-        // Read the clipboard now
-        let new_clipboard = get_clipboard_text();
+    pub fn get_foreground_process_name() -> Option<String> {
+        let output = Command::new("osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events"
+                    set frontApp to first application process whose frontmost is true
+                    return name of frontApp
+                end tell"#,
+            ])
+            .output()
+            .ok()?;
 
-        // If clipboard changed, we captured a selection
-        match (&new_clipboard, previous_clipboard) {
-            (Some(new), Some(old)) if new != old => Some(new.clone()),
-            (Some(new), None) => Some(new.clone()),
-            _ => None,
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
         }
     }
 }
