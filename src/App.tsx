@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useLauncher } from "./hooks/useLauncher";
 import { useAcpAgent } from "./hooks/useAcpAgent";
 import { useLaunchContext } from "./hooks/useLaunchContext";
@@ -12,15 +13,18 @@ import { AgentSettings } from "./components/AgentSettings";
 import CommandSuggestionPanel from "./components/CommandSuggestionPanel";
 import ConversationHistory from "./components/ConversationHistory";
 import { RewriteQuickActions } from "./components/RewriteQuickActions";
-import type { AgentConfig } from "./types";
+import type { AgentConfig, LaunchItem } from "./types";
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [autoFallback, setAutoFallback] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [forceAgentMode, setForceAgentMode] = useState(false);
   const [historySelectedIndex, setHistorySelectedIndex] = useState(0);
   const [rewriteSelectedIndex, setRewriteSelectedIndex] = useState(0);
+  const [newlyCreatedItems, setNewlyCreatedItems] = useState<LaunchItem[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const itemIdsBeforeTurnRef = useRef<Set<string>>(new Set());
 
   const agent = useAcpAgent();
   const launchCtx = useLaunchContext();
@@ -56,6 +60,27 @@ function App() {
     return () => window.removeEventListener("keydown", handleGlobalKey);
   }, []);
 
+  // Reset all state when the window is closed/hidden
+  useEffect(() => {
+    const unlisten = listen("launcher-reset", () => {
+      launcher.reset();
+      setSettingsOpen(false);
+      setShowHistory(false);
+      setForceAgentMode(false);
+      setHistorySelectedIndex(0);
+      setRewriteSelectedIndex(0);
+      if (agent.turnActive) {
+        agent.cancel();
+      }
+      if (agent.thread.length > 0) {
+        agent.clearThread();
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [launcher, agent]);
+
   const handleConnect = useCallback(
     async (config: AgentConfig) => {
       setAutoFallback(config.auto_fallback);
@@ -87,6 +112,10 @@ function App() {
     setShowHistory(false);
   }, [agent]);
 
+  const enterAgentMode = useCallback(() => {
+    setForceAgentMode(true);
+  }, []);
+
   const exitAgentMode = useCallback(() => {
     if (agent.turnActive) {
       agent.cancel();
@@ -101,10 +130,23 @@ function App() {
     }
 
     setShowHistory(false);
+    setForceAgentMode(false);
 
     // Refresh search results — the agent may have added/removed items
     launcher.refresh();
   }, [agent, launcher]);
+
+  const handleExecuteItem = useCallback(
+    async (itemId: string) => {
+      try {
+        await invoke("execute_item", { id: itemId });
+        await invoke("hide_window");
+      } catch (e) {
+        console.error("Failed to execute item:", e);
+      }
+    },
+    [],
+  );
 
   const handleRewriteQuickAction = useCallback(
     (prompt: string) => {
@@ -115,7 +157,7 @@ function App() {
   );
 
   const showAgentThread = agent.turnActive || agent.thread.length > 0;
-  const isAgentInputMode = launcher.agentMode || showAgentThread || showHistory;
+  const isAgentInputMode = launcher.agentMode || showAgentThread || showHistory || forceAgentMode;
 
   // Determine what to show in agent mode
   const showRewriteActions =
@@ -128,7 +170,7 @@ function App() {
 
   const showConversationHistory =
     isAgentInputMode &&
-    !showAgentThread &&
+    (!showAgentThread || showHistory) &&
     !showRewriteActions &&
     (showHistory || agent.conversations.length > 0);
 
@@ -145,6 +187,29 @@ function App() {
       anchor: windowAnchor,
     }).catch(() => {});
   }, [showOnlySearch, settingsOpen, windowAnchor]);
+
+  // Snapshot item IDs when agent turn starts, detect new items when it ends
+  const prevTurnActiveRef = useRef(false);
+  useEffect(() => {
+    if (agent.turnActive && !prevTurnActiveRef.current) {
+      // Turn just started — snapshot current item IDs
+      const ids = new Set(launcher.items.map((item) => item.id));
+      itemIdsBeforeTurnRef.current = ids;
+      setNewlyCreatedItems([]);
+    }
+    if (!agent.turnActive && prevTurnActiveRef.current) {
+      // Turn just ended — check for newly created items
+      invoke<LaunchItem[]>("search_items", { query: "" }).then((allItems) => {
+        const before = itemIdsBeforeTurnRef.current;
+        const created = allItems.filter((item) => !before.has(item.id));
+        setNewlyCreatedItems(created);
+        if (created.length > 0) {
+          launcher.refresh();
+        }
+      }).catch(() => {});
+    }
+    prevTurnActiveRef.current = agent.turnActive;
+  }, [agent.turnActive, launcher]);
 
   // Load conversations when entering agent mode with no thread
   useEffect(() => {
@@ -256,7 +321,16 @@ function App() {
     >
       {isAgentInputMode ? (
         <>
-          {showAgentThread ? (
+          {showConversationHistory ? (
+            <ConversationHistory
+              conversations={agent.conversations}
+              selectedIndex={historySelectedIndex}
+              onSelect={setHistorySelectedIndex}
+              onLoad={handleLoadConversation}
+              onDelete={agent.deleteConversation}
+              onNewConversation={handleNewConversation}
+            />
+          ) : showAgentThread ? (
             <AgentResponse
               thread={agent.thread}
               thoughts={agent.thoughts}
@@ -267,10 +341,11 @@ function App() {
               onNewConversation={handleNewConversation}
               onShowHistory={handleShowHistory}
               hasSelection={launchCtx.hasSelection}
+              newlyCreatedItems={newlyCreatedItems}
+              onExecuteItem={handleExecuteItem}
               onReplaceSelection={async (text) => {
                 try {
                   await launchCtx.replaceSelection(text);
-                  // Record the rewrite prompt for future suggestions
                   const lastUserMsg = [...agent.thread]
                     .reverse()
                     .find((m) => m.role === "user");
@@ -279,6 +354,7 @@ function App() {
                       .recordRewrite(lastUserMsg.content)
                       .catch(() => {});
                   }
+                  await invoke("hide_window");
                 } catch (e) {
                   console.error("Failed to replace selection:", e);
                 }
@@ -290,15 +366,6 @@ function App() {
               onSelect={handleRewriteQuickAction}
               selectedIndex={rewriteSelectedIndex}
               onHover={setRewriteSelectedIndex}
-            />
-          ) : showConversationHistory ? (
-            <ConversationHistory
-              conversations={agent.conversations}
-              selectedIndex={historySelectedIndex}
-              onSelect={setHistorySelectedIndex}
-              onLoad={handleLoadConversation}
-              onDelete={agent.deleteConversation}
-              onNewConversation={handleNewConversation}
             />
           ) : (
             <div className="flex-1" />
@@ -331,6 +398,7 @@ function App() {
             loading={launcher.loading}
             agentStatus={agent.status}
             onSettingsClick={() => setSettingsOpen(true)}
+            onAgentClick={enterAgentMode}
             mode="search"
             position="top"
           />

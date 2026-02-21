@@ -17,6 +17,7 @@ interface SearchBarProps {
   agentStatus: AgentStatus;
   onSettingsClick: () => void;
   onBackClick?: () => void;
+  onAgentClick?: () => void;
   mode?: "search" | "composer";
   position?: "top" | "bottom";
   focusSignal?: number;
@@ -117,6 +118,7 @@ function SearchBar({
   agentStatus,
   onSettingsClick,
   onBackClick,
+  onAgentClick,
   mode = "search",
   position = "top",
   focusSignal,
@@ -241,7 +243,7 @@ function SearchBar({
         spellCheck={false}
         autoComplete="off"
       />
-      <AgentStatusIndicator status={agentStatus} />
+      <AgentStatusIndicator status={agentStatus} onClick={onAgentClick} />
       {query && (
         <button
           onClick={() => onQueryChange("")}

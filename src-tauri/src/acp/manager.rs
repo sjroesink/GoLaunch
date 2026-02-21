@@ -615,10 +615,14 @@ fn build_agent_prompt(
          - If the query looks like a command (e.g. \"npm install\", \"docker compose up\"), \
            add it as a launcher item proactively.\n\
          - You have access to the user's current context: selected text, clipboard, and source application.\n\
-         - When the user asks to rewrite, rephrase, translate, or transform selected text, respond ONLY with \
-           the rewritten text — no explanation, no extra commentary. The launcher will use your \
-           response to replace the selection in the source application.\n\
-         - CRITICAL: Preserve the exact same format as the selected text. If the input is plain text, \
+         - IMPORTANT: Distinguish between two types of requests:\n\
+           A) REWRITE requests — when the user explicitly asks to rewrite, rephrase, translate, \
+              summarize, or transform selected text. ONLY then respond with just the rewritten text \
+              (no explanation, no commentary). The launcher will offer a \"Replace selection\" button.\n\
+           B) ACTION requests — when the user asks to add a command, open something, go somewhere, \
+              or perform any action. Even if there is selected text, this is NOT a rewrite. \
+              Add the item using the CLI and confirm what you did. The launcher will offer a \"Run\" button.\n\
+         - CRITICAL for rewrites: Preserve the exact same format as the selected text. If the input is plain text, \
            return plain text. If it's code, return code without wrapping it in markdown code fences. \
            If it's HTML, return HTML. Never add markdown formatting (like ```), headers, or bullet points \
            unless the original selected text already uses that format. Your output will be pasted directly \

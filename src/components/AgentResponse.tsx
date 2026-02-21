@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { AgentThreadMessage, PermissionRequest } from "../types";
+import type { AgentThreadMessage, LaunchItem, PermissionRequest } from "../types";
 import { PermissionDialog } from "./PermissionDialog";
 
 function ReplaceSelectionAction({
@@ -75,6 +75,51 @@ function ReplaceSelectionAction({
   );
 }
 
+function ExecuteItemAction({
+  items,
+  onExecute,
+}: {
+  items: LaunchItem[];
+  onExecute: (itemId: string) => void;
+}) {
+  const [executed, setExecuted] = useState<Set<string>>(new Set());
+
+  return (
+    <div className="mb-3 ml-1 space-y-1.5">
+      {items.map((item) => {
+        const done = executed.has(item.id);
+        return (
+          <div key={item.id} className="flex items-center gap-2">
+            {done ? (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Launched
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  onExecute(item.id);
+                  setExecuted((prev) => new Set(prev).add(item.id));
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-launcher-accent/20 text-launcher-accent border border-launcher-accent/30 hover:bg-launcher-accent/30 hover:text-launcher-accent transition-colors"
+                title={`Run: ${item.title}`}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Run "{item.title}"
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface AgentResponseProps {
   thread: AgentThreadMessage[];
   thoughts: string;
@@ -85,6 +130,8 @@ interface AgentResponseProps {
   onNewConversation?: () => void;
   onShowHistory?: () => void;
   hasSelection?: boolean;
+  newlyCreatedItems?: LaunchItem[];
+  onExecuteItem?: (itemId: string) => void;
   onReplaceSelection?: (text: string) => void;
 }
 
@@ -98,6 +145,8 @@ export function AgentResponse({
   onNewConversation,
   onShowHistory,
   hasSelection,
+  newlyCreatedItems,
+  onExecuteItem,
   onReplaceSelection,
 }: AgentResponseProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -173,9 +222,16 @@ export function AgentResponse({
               (e, i) =>
                 i > index && e.role === "assistant" && e.content.length > 0,
             );
+          const hasNewItems = newlyCreatedItems && newlyCreatedItems.length > 0;
+          const showExecute =
+            isLastNonEmptyAssistant &&
+            !turnActive &&
+            hasNewItems &&
+            onExecuteItem;
           const showReplace =
             isLastNonEmptyAssistant &&
             !turnActive &&
+            !hasNewItems &&
             hasSelection &&
             onReplaceSelection;
 
@@ -204,6 +260,12 @@ export function AgentResponse({
                   )}
                 </div>
               </div>
+              {showExecute && (
+                <ExecuteItemAction
+                  items={newlyCreatedItems!}
+                  onExecute={onExecuteItem!}
+                />
+              )}
               {showReplace && (
                 <ReplaceSelectionAction
                   text={entry.content}

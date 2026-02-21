@@ -98,11 +98,21 @@ fn check_npm_package_installed(package: &str) -> bool {
         package.split('@').next().unwrap_or(package)
     };
 
-    std::process::Command::new("npm")
+    #[cfg(target_os = "windows")]
+    let result = std::process::Command::new("cmd")
+        .args(["/C", "npm", "list", "-g", "--depth=0"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output();
+
+    #[cfg(not(target_os = "windows"))]
+    let result = std::process::Command::new("npm")
         .args(["list", "-g", "--depth=0"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .output()
+        .output();
+
+    result
         .map(|output| {
             let stdout = String::from_utf8_lossy(&output.stdout);
             stdout.contains(search_name)
