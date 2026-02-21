@@ -85,7 +85,7 @@ fn check_npm_package_installed(package: &str) -> bool {
     let search_name = if package.starts_with('@') {
         // Scoped: "@scope/pkg-name@version" → "@scope/pkg-name"
         package
-            .splitn(3, '@') // ["", "scope/pkg-name", "version"]
+            .split('@') // ["", "scope/pkg-name", "version"]
             .nth(1) // "scope/pkg-name"
             .map(|s| {
                 // Re-attach the leading '@' that splitn stripped

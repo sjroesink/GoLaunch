@@ -368,6 +368,7 @@ impl AcpManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn prompt(
         &mut self,
         query: &str,
