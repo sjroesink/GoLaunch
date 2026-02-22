@@ -7,6 +7,7 @@ use agent_client_protocol::{
 };
 use golaunch_core::{
     CommandHistory, CommandSuggestion, Conversation, ConversationMessage, Item, Memory,
+    SlashCommand,
 };
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot};
@@ -378,6 +379,7 @@ impl AcpManager {
         recent_history: &[CommandHistory],
         recent_conversations: &[(Conversation, Vec<ConversationMessage>)],
         launch_context: &crate::context::LaunchContext,
+        slash_commands: &[SlashCommand],
     ) -> Result<(), String> {
         let session_id = self.session_id.clone().ok_or("Not connected to agent")?;
         let prompt_tx = self.prompt_tx.as_ref().ok_or("Not connected to agent")?;
@@ -390,6 +392,7 @@ impl AcpManager {
             recent_history,
             recent_conversations,
             launch_context,
+            slash_commands,
         );
         let content = vec![ContentBlock::Text(TextContent::new(prompt_text))];
 
@@ -589,10 +592,15 @@ fn build_agent_prompt(
     recent_history: &[CommandHistory],
     recent_conversations: &[(Conversation, Vec<ConversationMessage>)],
     launch_context: &crate::context::LaunchContext,
+    slash_commands: &[SlashCommand],
 ) -> String {
     let cli = resolve_cli_path();
     let db_path = golaunch_core::Database::db_path()
         .unwrap_or_else(|_| "golaunch.db".into())
+        .to_string_lossy()
+        .to_string();
+    let slash_dir = golaunch_core::Database::slash_commands_dir()
+        .unwrap_or_else(|_| "slash-commands".into())
         .to_string_lossy()
         .to_string();
 
@@ -695,7 +703,39 @@ fn build_agent_prompt(
          # Get recent conversation context (formatted summary)\n\
          \"{cli}\" conversations context --limit 5\n\
          ```\n\
-         Use conversation commands to recall earlier discussions with the user.\n\n"
+         Use conversation commands to recall earlier discussions with the user.\n\n\
+         ### Slash Commands\n\
+         Slash commands are user-defined scripts invoked with `/name args...` from the launcher.\n\
+         When the user types a slash command that doesn't exist yet, you receive the request.\n\n\
+         Your job when receiving an unknown slash command:\n\
+         1. Figure out what the script should do based on the command name and arguments.\n\
+            For example: `/kill 4924` → a script that kills the process running on port 4924.\n\
+         2. Briefly confirm with the user what the script will do.\n\
+         3. Write the script file to the slash-commands directory.\n\
+         4. Register it with the CLI using `slash-commands add`.\n\
+         5. Execute it immediately using `slash-commands run`.\n\n\
+         Script storage directory: `{slash_dir}`\n\
+         Scripts: `.ps1` (PowerShell) on Windows, `.sh` (Bash) on Unix/macOS.\n\n\
+         ```bash\n\
+         # List all slash commands\n\
+         \"{cli}\" slash-commands list --json\n\n\
+         # Register a new slash command\n\
+         \"{cli}\" slash-commands add --name \"kill\" --description \"Kill process on port\" --script-path \"{slash_dir}/kill.ps1\"\n\n\
+         # Run a slash command with arguments\n\
+         \"{cli}\" slash-commands run --name \"kill\" --args \"4924\"\n\n\
+         # Get a slash command by name\n\
+         \"{cli}\" slash-commands get --name \"kill\"\n\n\
+         # Remove a slash command\n\
+         \"{cli}\" slash-commands remove --name \"kill\"\n\
+         ```\n\n\
+         IMPORTANT for creating slash commands:\n\
+         - First write the script file to disk (use your file-writing / shell capabilities).\n\
+         - Then register it with `slash-commands add --name ... --description ... --script-path ...`.\n\
+         - Then execute it with `slash-commands run --name ... --args ...`.\n\
+         - On Windows: write PowerShell scripts (.ps1). Arguments are passed as positional params ($args[0], $args[1], etc.).\n\
+         - On Unix: write Bash scripts (.sh). Arguments are passed as $1, $2, etc.\n\
+         - Make scripts robust: validate arguments, handle errors, produce clear output.\n\
+         - Be smart about what the script should do based on the command name — the user expects you to infer the purpose.\n\n"
     ));
 
     // ── User memory / preferences ──
@@ -710,6 +750,21 @@ fn build_agent_prompt(
             p.push_str(&format!(
                 "- {}: {}{} [type: {}]\n",
                 mem.key, mem.value, ctx, mem.memory_type
+            ));
+        }
+        p.push('\n');
+    }
+
+    // ── Registered slash commands ──
+    if !slash_commands.is_empty() {
+        p.push_str("## Registered Slash Commands\n");
+        for cmd in slash_commands {
+            p.push_str(&format!(
+                "- **/{name}**: {desc} (script: `{path}`, used {count} times)\n",
+                name = cmd.name,
+                desc = cmd.description,
+                path = cmd.script_path,
+                count = cmd.usage_count,
             ));
         }
         p.push('\n');

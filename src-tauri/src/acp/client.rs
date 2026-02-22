@@ -37,7 +37,9 @@ fn should_auto_allow_read_lookup(command_preview: Option<&str>) -> bool {
         || padded.contains(" conversations list ")
         || padded.contains(" conversations search ")
         || padded.contains(" conversations show ")
-        || padded.contains(" conversations context ");
+        || padded.contains(" conversations context ")
+        || padded.contains(" slash-commands list ")
+        || padded.contains(" slash-commands get ");
 
     let is_write_operation = padded.contains(" memory add ")
         || padded.contains(" memory remove ")

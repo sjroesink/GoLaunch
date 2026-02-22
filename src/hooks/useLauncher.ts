@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { LaunchItem, AgentStatus, CommandSuggestion } from "../types";
+import { LaunchItem, AgentStatus, CommandSuggestion, SlashCommand } from "../types";
 
 interface UseLauncherOptions {
   agentStatus: AgentStatus;
@@ -21,6 +21,8 @@ export function useLauncher(options: UseLauncherOptions) {
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [focusInputSignal, setFocusInputSignal] = useState(0);
   const [savingCommand, setSavingCommand] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const queryBeforeSuggestionSelectRef = useRef<string | null>(null);
 
@@ -68,6 +70,70 @@ export function useLauncher(options: UseLauncherOptions) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [query, fetchItems]);
+
+  // Slash mode: detect "/" prefix
+  const isSlashMode = query.startsWith("/");
+
+  // Fetch slash commands when in slash mode
+  useEffect(() => {
+    if (!isSlashMode) {
+      setSlashCommands([]);
+      setSelectedSlashIndex(0);
+      return;
+    }
+
+    const afterSlash = query.slice(1);
+    const nameFragment = afterSlash.split(/\s/)[0];
+
+    if (nameFragment === "") {
+      invoke<SlashCommand[]>("list_slash_commands")
+        .then((cmds) => {
+          setSlashCommands(cmds);
+          setSelectedSlashIndex(0);
+        })
+        .catch(() => setSlashCommands([]));
+    } else {
+      invoke<SlashCommand[]>("search_slash_commands", { query: nameFragment })
+        .then((cmds) => {
+          setSlashCommands(cmds);
+          setSelectedSlashIndex(0);
+        })
+        .catch(() => setSlashCommands([]));
+    }
+  }, [query, isSlashMode]);
+
+  const parseSlashInput = useCallback(
+    (input: string): { name: string; args: string } | null => {
+      if (!input.startsWith("/")) return null;
+      const withoutSlash = input.slice(1).trim();
+      const spaceIndex = withoutSlash.indexOf(" ");
+      if (spaceIndex === -1) {
+        return { name: withoutSlash, args: "" };
+      }
+      return {
+        name: withoutSlash.slice(0, spaceIndex),
+        args: withoutSlash.slice(spaceIndex + 1).trim(),
+      };
+    },
+    [],
+  );
+
+  const executeSlashCommand = useCallback(
+    async (name: string, args: string) => {
+      try {
+        await invoke<string>("execute_slash_command", { name, args });
+        await invoke("hide_window");
+      } catch (err: unknown) {
+        // Command not found -> send to agent
+        if (typeof err === "string" && err.includes("not found")) {
+          options.onAgentPrompt(`/${name} ${args}`.trim());
+        } else {
+          console.error("Slash command failed:", err);
+        }
+      }
+    },
+    [options],
+  );
 
   const filteredItems = activeCategory
     ? items.filter((item) => item.category === activeCategory)
@@ -180,6 +246,46 @@ export function useLauncher(options: UseLauncherOptions) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Slash command mode: Enter executes or autocompletes
+      if (isSlashMode && e.key === "Enter") {
+        e.preventDefault();
+        const parsed = parseSlashInput(query);
+        if (parsed && parsed.name) {
+          const hasArgs = query.includes(" ");
+          if (hasArgs) {
+            // User typed "/kill 4924" — execute directly
+            executeSlashCommand(parsed.name, parsed.args);
+          } else if (slashCommands.length > 0) {
+            // User pressed Enter on a slash command from the list — autocomplete
+            const selected = slashCommands[selectedSlashIndex];
+            if (selected) {
+              setQueryState(`/${selected.name} `);
+            }
+          } else {
+            // No matching slash command — send to agent for creation
+            options.onAgentPrompt(query);
+          }
+        }
+        return;
+      }
+
+      // Slash command mode: Arrow keys navigate list
+      if (
+        isSlashMode &&
+        slashCommands.length > 0 &&
+        (e.key === "ArrowDown" || e.key === "ArrowUp")
+      ) {
+        e.preventDefault();
+        if (e.key === "ArrowDown") {
+          setSelectedSlashIndex((prev) =>
+            Math.min(prev + 1, slashCommands.length - 1),
+          );
+        } else {
+          setSelectedSlashIndex((prev) => Math.max(prev - 1, 0));
+        }
+        return;
+      }
+
       // In agent mode with active turn, Escape cancels
       if (options.agentTurnActive && e.key === "Escape") {
         e.preventDefault();
@@ -297,6 +403,11 @@ export function useLauncher(options: UseLauncherOptions) {
       previewSuggestion,
       restoreQueryFromSuggestionPreview,
       setQuery,
+      isSlashMode,
+      slashCommands,
+      selectedSlashIndex,
+      parseSlashInput,
+      executeSlashCommand,
     ],
   );
 
@@ -310,6 +421,8 @@ export function useLauncher(options: UseLauncherOptions) {
     setSelectedIndex(0);
     setActiveCategory(null);
     setSuggestions([]);
+    setSlashCommands([]);
+    setSelectedSlashIndex(0);
     fetchItems("");
     fetchCategories();
   }, [fetchItems, fetchCategories, setQuery]);
@@ -336,5 +449,10 @@ export function useLauncher(options: UseLauncherOptions) {
     saveCommandFromSuggestion,
     refresh,
     reset,
+    isSlashMode,
+    slashCommands,
+    selectedSlashIndex,
+    setSelectedSlashIndex,
+    executeSlashCommand,
   };
 }

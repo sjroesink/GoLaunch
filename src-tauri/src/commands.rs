@@ -2,7 +2,7 @@ use chrono::Timelike;
 use golaunch_core::{
     CommandHistory, CommandSuggestion, Conversation, ConversationMessage, ConversationWithPreview,
     Database, Item, Memory, NewCommandHistory, NewConversation, NewConversationMessage, NewItem,
-    NewMemory,
+    NewMemory, NewSlashCommand, SlashCommand,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -451,6 +451,9 @@ pub async fn acp_prompt(
     // Fetch recent conversation context
     let recent_conversations = db.get_recent_conversation_context(3).unwrap_or_default();
 
+    // Fetch registered slash commands
+    let slash_commands = db.list_slash_commands().unwrap_or_default();
+
     let mut manager = state.inner().0.lock().await;
     manager
         .prompt(
@@ -461,6 +464,7 @@ pub async fn acp_prompt(
             &recent_history,
             &recent_conversations,
             &launch_context,
+            &slash_commands,
         )
         .await
 }
@@ -672,6 +676,87 @@ pub fn record_rewrite(prompt: String) -> Result<(), String> {
 pub fn get_rewrite_suggestions() -> Result<Vec<CommandSuggestion>, String> {
     let db = Database::new()?;
     db.get_recent_rewrites(10)
+}
+
+// --- Slash command commands ---
+
+#[tauri::command]
+pub fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
+    let db = Database::new()?;
+    db.list_slash_commands()
+}
+
+#[tauri::command]
+pub fn search_slash_commands(query: String) -> Result<Vec<SlashCommand>, String> {
+    let db = Database::new()?;
+    db.search_slash_commands(&query)
+}
+
+#[tauri::command]
+pub fn get_slash_command_by_name(name: String) -> Result<SlashCommand, String> {
+    let db = Database::new()?;
+    db.get_slash_command_by_name(&name)
+}
+
+#[tauri::command]
+pub fn add_slash_command(
+    name: String,
+    description: String,
+    script_path: String,
+) -> Result<SlashCommand, String> {
+    let db = Database::new()?;
+    db.add_slash_command(NewSlashCommand {
+        name,
+        description,
+        script_path,
+    })
+}
+
+#[tauri::command]
+pub fn remove_slash_command(name: String) -> Result<bool, String> {
+    let db = Database::new()?;
+    db.remove_slash_command_by_name(&name)
+}
+
+#[tauri::command]
+pub fn execute_slash_command(name: String, args: String) -> Result<String, String> {
+    let db = Database::new()?;
+    let cmd = db.get_slash_command_by_name(&name)?;
+    db.increment_slash_command_usage(&cmd.id)?;
+
+    let _ = db.record_command(NewCommandHistory {
+        item_id: None,
+        command_text: format!("/{} {}", name, args),
+        action_type: "slash_command".to_string(),
+        source: Some("launcher".to_string()),
+    });
+
+    #[cfg(target_os = "windows")]
+    let output = {
+        std::process::Command::new("powershell")
+            .args(["-ExecutionPolicy", "Bypass", "-File", &cmd.script_path])
+            .args(args.split_whitespace().collect::<Vec<&str>>())
+            .output()
+            .map_err(|e| format!("Failed to execute script: {e}"))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = {
+        std::process::Command::new("sh")
+            .arg(&cmd.script_path)
+            .args(args.split_whitespace().collect::<Vec<&str>>())
+            .output()
+            .map_err(|e| format!("Failed to execute script: {e}"))?
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(format!("Script failed:\n{stderr}\n{stdout}"))
+    }
 }
 
 // --- Per-agent env var commands ---
