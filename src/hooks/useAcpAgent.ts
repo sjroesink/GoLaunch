@@ -73,9 +73,39 @@ export function useAcpAgent() {
           break;
         case "tool_call":
           setIsThinking(true);
+          // Add tool call entry to the thread
+          setThread((prev) => [
+            ...prev,
+            {
+              id: `tool-${update.id}`,
+              role: "tool",
+              content: "",
+              toolTitle: update.title ?? "Tool",
+              toolStatus: "running",
+            },
+          ]);
           break;
-        case "tool_call_update":
+        case "tool_call_update": {
+          // Update existing tool call entry status
+          const toolEntryId = `tool-${update.id}`;
+          setThread((prev) =>
+            prev.map((entry) =>
+              entry.id === toolEntryId
+                ? {
+                    ...entry,
+                    toolTitle: update.title ?? entry.toolTitle,
+                    toolStatus:
+                      update.status === "Some(Complete)"
+                        ? "completed"
+                        : update.status === "Some(Error)"
+                          ? "error"
+                          : entry.toolStatus,
+                  }
+                : entry,
+            ),
+          );
           break;
+        }
         case "plan":
           break;
         case "turn_complete": {
@@ -111,7 +141,22 @@ export function useAcpAgent() {
     const unlistenPermission = listen<PermissionRequest>(
       "acp-permission-request",
       (event) => {
-        setPermissionRequest(event.payload);
+        const req = event.payload;
+        setPermissionRequest(req);
+
+        // Update the matching tool call entry with the command preview and pending status
+        const toolEntryId = `tool-${req.request_id}`;
+        setThread((prev) =>
+          prev.map((entry) =>
+            entry.id === toolEntryId
+              ? {
+                  ...entry,
+                  commandPreview: req.command_preview ?? undefined,
+                  toolStatus: "pending" as const,
+                }
+              : entry,
+          ),
+        );
       },
     );
 
@@ -315,6 +360,16 @@ export function useAcpAgent() {
       try {
         await invoke("acp_resolve_permission", { requestId, optionId });
         setPermissionRequest(null);
+
+        // Mark the tool call entry as approved (or denied based on optionId)
+        const toolEntryId = `tool-${requestId}`;
+        setThread((prev) =>
+          prev.map((entry) =>
+            entry.id === toolEntryId
+              ? { ...entry, toolStatus: "approved" as const }
+              : entry,
+          ),
+        );
       } catch (e) {
         console.error("Failed to resolve permission:", e);
       }

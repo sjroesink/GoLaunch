@@ -139,19 +139,28 @@ export function useLauncher(options: UseLauncherOptions) {
     ? items.filter((item) => item.category === activeCategory)
     : items;
 
-  // Agent mode: zero results, query has content, agent is connected
-  const agentMode =
+  // Agent mode conditions met (used internally — UI doesn't switch until Enter)
+  const agentModeReady =
     filteredItems.length === 0 &&
     query.length > 2 &&
     options.agentStatus === "connected" &&
     options.agentAutoFallback;
 
-  // Fetch suggestions when no results and not in agent mode
+  // Agent mode only activates after user confirms with Enter
+  const [agentModeConfirmed, setAgentModeConfirmed] = useState(false);
+  const agentMode = agentModeConfirmed;
+
+  // Reset confirmed agent mode when query changes
+  useEffect(() => {
+    setAgentModeConfirmed(false);
+  }, [query]);
+
+  // Fetch suggestions when no results and agent mode not yet confirmed
   useEffect(() => {
     const shouldSuggest =
       filteredItems.length === 0 &&
       query.length > 2 &&
-      !agentMode;
+      !agentModeConfirmed;
 
     if (shouldSuggest) {
       invoke<CommandSuggestion[]>("get_command_suggestions", { query })
@@ -160,7 +169,7 @@ export function useLauncher(options: UseLauncherOptions) {
     } else {
       setSuggestions([]);
     }
-  }, [filteredItems.length, query, agentMode]);
+  }, [filteredItems.length, query, agentModeConfirmed]);
 
   useEffect(() => {
     if (suggestions.length === 0) {
@@ -331,9 +340,10 @@ export function useLauncher(options: UseLauncherOptions) {
         return;
       }
 
-      // In agent mode, Enter triggers agent prompt
-      if (agentMode && e.key === "Enter") {
+      // Agent mode ready: Enter confirms and triggers agent prompt
+      if (agentModeReady && e.key === "Enter") {
         e.preventDefault();
+        setAgentModeConfirmed(true);
         options.onAgentPrompt(query);
         return;
       }
@@ -395,7 +405,7 @@ export function useLauncher(options: UseLauncherOptions) {
       query,
       categories,
       activeCategory,
-      agentMode,
+      agentModeReady,
       options,
       suggestions,
       saveCommandFromSuggestion,
@@ -423,6 +433,7 @@ export function useLauncher(options: UseLauncherOptions) {
     setSuggestions([]);
     setSlashCommands([]);
     setSelectedSlashIndex(0);
+    setAgentModeConfirmed(false);
     fetchItems("");
     fetchCategories();
   }, [fetchItems, fetchCategories, setQuery]);
