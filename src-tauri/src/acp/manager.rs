@@ -641,7 +641,22 @@ fn build_agent_prompt(
            If it's HTML, return HTML. Never add markdown formatting (like ```), headers, or bullet points \
            unless the original selected text already uses that format. Your output will be pasted directly \
            in place of the selection, so it must be in the same format.\n\
-         - When working with selected text, consider the source application for appropriate formatting.\n\n",
+         - When working with selected text, consider the source application for appropriate formatting.\n\n\
+         CRITICAL — Slash Command Detection:\n\
+         - If the user query starts with `/` (e.g., `/kill 3900`, `/deploy staging`), this is ALWAYS a \
+           slash command request. NEVER execute it as a direct action.\n\
+         - Instead, ALWAYS follow the slash command creation workflow:\n\
+           1. Infer what the script should do from the command name and arguments \
+              (e.g., `/kill 3900` → kill the process running on port 3900).\n\
+           2. Briefly tell the user what you'll create (e.g., \"I'll create a `/kill` slash command that \
+              kills the process on a given port.\").\n\
+           3. Write the script file to the slash-commands directory.\n\
+           4. Register it with `slash-commands add`.\n\
+           5. Execute it immediately with `slash-commands run`.\n\
+         - Be smart about inferring the purpose from the name: `/kill` → kill process on port, \
+           `/open` → open a URL or app, `/deploy` → deploy to environment, etc.\n\
+         - NEVER just run the action directly (e.g., don't just run a kill command). ALWAYS create a \
+           reusable slash command script first so the user can reuse it.\n\n",
     );
 
     // ── CLI Reference ──
@@ -706,14 +721,15 @@ fn build_agent_prompt(
          Use conversation commands to recall earlier discussions with the user.\n\n\
          ### Slash Commands\n\
          Slash commands are user-defined scripts invoked with `/name args...` from the launcher.\n\
-         When the user types a slash command that doesn't exist yet, you receive the request.\n\n\
-         Your job when receiving an unknown slash command:\n\
-         1. Figure out what the script should do based on the command name and arguments.\n\
-            For example: `/kill 4924` → a script that kills the process running on port 4924.\n\
-         2. Briefly confirm with the user what the script will do.\n\
+         When the user query starts with `/`, it is ALWAYS a slash command request — never treat it as a regular query.\n\n\
+         Your MANDATORY workflow when receiving a `/command args` query:\n\
+         1. Infer what the script should do from the command name and arguments.\n\
+            Be smart: `/kill 4924` → kill process on port 4924, `/open github` → open github.com, etc.\n\
+         2. Briefly tell the user what you'll create (1-2 sentences max).\n\
          3. Write the script file to the slash-commands directory.\n\
          4. Register it with the CLI using `slash-commands add`.\n\
-         5. Execute it immediately using `slash-commands run`.\n\n\
+         5. Execute it immediately using `slash-commands run`.\n\
+         NEVER skip steps 3-4. ALWAYS create a reusable script, never just run the action directly.\n\n\
          Script storage directory: `{slash_dir}`\n\
          Scripts: `.ps1` (PowerShell) on Windows, `.sh` (Bash) on Unix/macOS.\n\n\
          ```bash\n\
