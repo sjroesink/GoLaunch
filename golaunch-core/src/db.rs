@@ -1,7 +1,7 @@
 use crate::models::{
     CommandHistory, CommandSuggestion, Conversation, ConversationMessage, ConversationWithPreview,
     Item, Memory, NewCommandHistory, NewConversation, NewConversationMessage, NewItem, NewMemory,
-    Setting, UpdateItem,
+    NewSlashCommand, Setting, SlashCommand, UpdateItem,
 };
 use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::PathBuf;
@@ -17,6 +17,10 @@ impl Database {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create database directory: {e}"))?;
+            // Also create the slash-commands directory alongside the database
+            let slash_dir = parent.join("slash-commands");
+            std::fs::create_dir_all(&slash_dir)
+                .map_err(|e| format!("Failed to create slash-commands directory: {e}"))?;
         }
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database at {}: {e}", db_path.display()))?;
@@ -42,6 +46,13 @@ impl Database {
             .or_else(dirs::home_dir)
             .ok_or_else(|| "Cannot determine home directory".to_string())?;
         Ok(data_dir.join("golaunch").join("golaunch.db"))
+    }
+
+    pub fn slash_commands_dir() -> Result<PathBuf, String> {
+        let data_dir = dirs::data_local_dir()
+            .or_else(dirs::home_dir)
+            .ok_or_else(|| "Cannot determine home directory".to_string())?;
+        Ok(data_dir.join("golaunch").join("slash-commands"))
     }
 
     fn initialize(&self) -> Result<(), String> {
@@ -113,6 +124,18 @@ impl Database {
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 );
                 CREATE INDEX IF NOT EXISTS idx_conv_messages_conv_id ON conversation_messages(conversation_id);
+
+                CREATE TABLE IF NOT EXISTS slash_commands (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT NOT NULL DEFAULT '',
+                    script_path TEXT NOT NULL,
+                    usage_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_slash_commands_name ON slash_commands(name);
+                CREATE INDEX IF NOT EXISTS idx_slash_commands_usage ON slash_commands(usage_count);
                 ",
             )
             .map_err(|e| format!("Failed to initialize database: {e}"))
@@ -1055,6 +1078,112 @@ impl Database {
             enabled: row.get::<_, i64>(9)? != 0,
             created_at: row.get(10)?,
             updated_at: row.get(11)?,
+        })
+    }
+
+    // --- Slash Commands ---
+
+    pub fn add_slash_command(&self, cmd: NewSlashCommand) -> Result<SlashCommand, String> {
+        let id = Uuid::new_v4().to_string();
+        self.conn
+            .execute(
+                "INSERT INTO slash_commands (id, name, description, script_path)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![id, cmd.name, cmd.description, cmd.script_path],
+            )
+            .map_err(|e| format!("Failed to add slash command: {e}"))?;
+        self.get_slash_command(&id)
+    }
+
+    pub fn get_slash_command(&self, id: &str) -> Result<SlashCommand, String> {
+        self.conn
+            .query_row(
+                "SELECT id, name, description, script_path, usage_count, created_at, updated_at
+                 FROM slash_commands WHERE id = ?1",
+                params![id],
+                Self::row_to_slash_command,
+            )
+            .map_err(|e| format!("Slash command not found: {e}"))
+    }
+
+    pub fn get_slash_command_by_name(&self, name: &str) -> Result<SlashCommand, String> {
+        self.conn
+            .query_row(
+                "SELECT id, name, description, script_path, usage_count, created_at, updated_at
+                 FROM slash_commands WHERE name = ?1",
+                params![name],
+                Self::row_to_slash_command,
+            )
+            .map_err(|e| format!("Slash command '/{name}' not found: {e}"))
+    }
+
+    pub fn list_slash_commands(&self) -> Result<Vec<SlashCommand>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, name, description, script_path, usage_count, created_at, updated_at
+                 FROM slash_commands
+                 ORDER BY usage_count DESC, name ASC",
+            )
+            .map_err(|e| format!("Failed to prepare query: {e}"))?;
+
+        let commands = stmt
+            .query_map([], Self::row_to_slash_command)
+            .map_err(|e| format!("Failed to execute query: {e}"))?
+            .collect::<SqlResult<Vec<SlashCommand>>>()
+            .map_err(|e| format!("Failed to collect results: {e}"))?;
+
+        Ok(commands)
+    }
+
+    pub fn search_slash_commands(&self, query: &str) -> Result<Vec<SlashCommand>, String> {
+        let pattern = format!("%{query}%");
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, name, description, script_path, usage_count, created_at, updated_at
+                 FROM slash_commands
+                 WHERE name LIKE ?1 OR description LIKE ?1
+                 ORDER BY usage_count DESC, name ASC",
+            )
+            .map_err(|e| format!("Failed to prepare query: {e}"))?;
+
+        let commands = stmt
+            .query_map(params![pattern], Self::row_to_slash_command)
+            .map_err(|e| format!("Failed to execute query: {e}"))?
+            .collect::<SqlResult<Vec<SlashCommand>>>()
+            .map_err(|e| format!("Failed to collect results: {e}"))?;
+
+        Ok(commands)
+    }
+
+    pub fn remove_slash_command_by_name(&self, name: &str) -> Result<bool, String> {
+        let rows = self
+            .conn
+            .execute("DELETE FROM slash_commands WHERE name = ?1", params![name])
+            .map_err(|e| format!("Failed to remove slash command: {e}"))?;
+        Ok(rows > 0)
+    }
+
+    pub fn increment_slash_command_usage(&self, id: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE slash_commands SET usage_count = usage_count + 1, updated_at = datetime('now') WHERE id = ?1",
+                params![id],
+            )
+            .map_err(|e| format!("Failed to increment slash command usage: {e}"))?;
+        Ok(())
+    }
+
+    fn row_to_slash_command(row: &rusqlite::Row) -> rusqlite::Result<SlashCommand> {
+        Ok(SlashCommand {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            description: row.get(2)?,
+            script_path: row.get(3)?,
+            usage_count: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
         })
     }
 }

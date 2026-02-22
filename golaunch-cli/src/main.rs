@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use golaunch_core::{Database, NewCommandHistory, NewItem, NewMemory, UpdateItem};
+use golaunch_core::{Database, NewCommandHistory, NewItem, NewMemory, NewSlashCommand, UpdateItem};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -156,6 +156,12 @@ enum Commands {
         #[command(subcommand)]
         action: ConversationCommands,
     },
+
+    /// Manage slash commands
+    SlashCommands {
+        #[command(subcommand)]
+        action: SlashCommandActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -259,6 +265,56 @@ enum ConversationCommands {
         /// Number of recent conversations to include
         #[arg(long, default_value = "5")]
         limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum SlashCommandActions {
+    /// List all slash commands
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Add (register) a new slash command
+    Add {
+        /// Command name (without the leading /)
+        #[arg(long)]
+        name: String,
+
+        /// Description of what the command does
+        #[arg(long, default_value = "")]
+        description: String,
+
+        /// Path to the script file
+        #[arg(long)]
+        script_path: String,
+    },
+
+    /// Remove a slash command by name
+    Remove {
+        /// Command name to remove
+        #[arg(long)]
+        name: String,
+    },
+
+    /// Run a slash command by name with arguments
+    Run {
+        /// Command name (without the leading /)
+        #[arg(long)]
+        name: String,
+
+        /// Arguments to pass to the script
+        #[arg(long, default_value = "")]
+        args: String,
+    },
+
+    /// Get a slash command by name (JSON output)
+    Get {
+        /// Command name
+        #[arg(long)]
+        name: String,
     },
 }
 
@@ -702,6 +758,104 @@ fn run(cli: Cli) -> Result<(), String> {
                             println!();
                         }
                     }
+                }
+            }
+            Ok(())
+        }
+
+        Commands::SlashCommands { action } => {
+            let db = get_db(cli.db)?;
+            match action {
+                SlashCommandActions::List { json } => {
+                    let commands = db.list_slash_commands()?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&commands).unwrap());
+                    } else if commands.is_empty() {
+                        println!("No slash commands found");
+                    } else {
+                        let header = format!(
+                            "{:<38} {:<15} {:<30} {:<6}",
+                            "ID", "NAME", "DESCRIPTION", "USED"
+                        );
+                        println!("{header}");
+                        println!("{}", "-".repeat(89));
+                        for cmd in &commands {
+                            let desc = if cmd.description.len() > 28 {
+                                format!("{}...", &cmd.description[..25])
+                            } else {
+                                cmd.description.clone()
+                            };
+                            println!(
+                                "{:<38} {:<15} {:<30} {:<6}",
+                                cmd.id, cmd.name, desc, cmd.usage_count
+                            );
+                        }
+                        println!("\nTotal: {} commands", commands.len());
+                    }
+                }
+                SlashCommandActions::Add {
+                    name,
+                    description,
+                    script_path,
+                } => {
+                    let cmd = db.add_slash_command(NewSlashCommand {
+                        name,
+                        description,
+                        script_path,
+                    })?;
+                    println!("{}", serde_json::to_string_pretty(&cmd).unwrap());
+                }
+                SlashCommandActions::Remove { name } => {
+                    if db.remove_slash_command_by_name(&name)? {
+                        println!("Slash command '/{name}' removed successfully");
+                    } else {
+                        eprintln!("Slash command '/{name}' not found");
+                        std::process::exit(1);
+                    }
+                }
+                SlashCommandActions::Run { name, args } => {
+                    let cmd = db.get_slash_command_by_name(&name)?;
+                    db.increment_slash_command_usage(&cmd.id)?;
+
+                    let _ = db.record_command(NewCommandHistory {
+                        item_id: None,
+                        command_text: format!("/{} {}", name, args),
+                        action_type: "slash_command".to_string(),
+                        source: Some("cli".to_string()),
+                    });
+
+                    #[cfg(target_os = "windows")]
+                    let output = {
+                        std::process::Command::new("powershell")
+                            .args(["-ExecutionPolicy", "Bypass", "-File", &cmd.script_path])
+                            .args(args.split_whitespace())
+                            .output()
+                            .map_err(|e| format!("Failed to execute script: {e}"))?
+                    };
+                    #[cfg(not(target_os = "windows"))]
+                    let output = {
+                        std::process::Command::new("sh")
+                            .arg(&cmd.script_path)
+                            .args(args.split_whitespace())
+                            .output()
+                            .map_err(|e| format!("Failed to execute script: {e}"))?
+                    };
+
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if !stdout.is_empty() {
+                        print!("{stdout}");
+                    }
+                    if !stderr.is_empty() {
+                        eprint!("{stderr}");
+                    }
+                    if !output.status.success() {
+                        std::process::exit(output.status.code().unwrap_or(1));
+                    }
+                }
+                SlashCommandActions::Get { name } => {
+                    let cmd = db.get_slash_command_by_name(&name)?;
+                    println!("{}", serde_json::to_string_pretty(&cmd).unwrap());
                 }
             }
             Ok(())

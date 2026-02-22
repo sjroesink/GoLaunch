@@ -114,6 +114,18 @@ export interface Memory {
   last_accessed: string;
 }
 
+// --- Slash Command types ---
+
+export interface SlashCommand {
+  id: string;
+  name: string;
+  description: string;
+  script_path: string;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Conversation types ---
 
 export interface Conversation {

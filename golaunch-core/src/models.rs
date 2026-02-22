@@ -133,3 +133,23 @@ pub struct ConversationWithPreview {
     pub message_count: i64,
     pub last_message_preview: Option<String>,
 }
+
+// --- Slash Commands ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlashCommand {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub script_path: String,
+    pub usage_count: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewSlashCommand {
+    pub name: String,
+    pub description: String,
+    pub script_path: String,
+}

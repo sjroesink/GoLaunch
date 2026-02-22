@@ -11,6 +11,7 @@ import StatusBar from "./components/StatusBar";
 import { AgentResponse } from "./components/AgentResponse";
 import { AgentSettings } from "./components/AgentSettings";
 import CommandSuggestionPanel from "./components/CommandSuggestionPanel";
+import SlashCommandList from "./components/SlashCommandList";
 import ConversationHistory from "./components/ConversationHistory";
 import { RewriteQuickActions } from "./components/RewriteQuickActions";
 import type { AgentConfig, LaunchItem } from "./types";
@@ -176,6 +177,7 @@ function App() {
 
   const showOnlySearch =
     launcher.items.length === 0 &&
+    !launcher.isSlashMode &&
     !showAgentThread &&
     !showHistory &&
     !showRewriteActions;
@@ -412,7 +414,17 @@ function App() {
           )}
 
           {!showOnlySearch &&
-            (launcher.suggestions.length > 0 ? (
+            (launcher.isSlashMode ? (
+              <SlashCommandList
+                commands={launcher.slashCommands}
+                query={launcher.query}
+                selectedIndex={launcher.selectedSlashIndex}
+                onSelect={launcher.setSelectedSlashIndex}
+                onExecute={(cmd, args) =>
+                  launcher.executeSlashCommand(cmd.name, args)
+                }
+              />
+            ) : launcher.suggestions.length > 0 ? (
               <CommandSuggestionPanel
                 suggestions={launcher.suggestions}
                 query={launcher.query}

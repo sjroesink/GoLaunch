@@ -62,6 +62,12 @@ pub fn run() {
             replace_selection_text,
             record_rewrite,
             get_rewrite_suggestions,
+            list_slash_commands,
+            search_slash_commands,
+            get_slash_command_by_name,
+            add_slash_command,
+            remove_slash_command,
+            execute_slash_command,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
